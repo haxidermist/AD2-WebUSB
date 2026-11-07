@@ -7,12 +7,12 @@ its own FPGA design into the board. No WaveForms, no Adept, no drivers to instal
 This is an independent project. It is not made, supported or endorsed by Digilent. Analog Discovery is a
 trademark of Digilent.
 
-**Open the app: https://haxidermist.github.io/A2D/ad2.html**
+**Open the app: https://haxidermist.github.io/AD2-WebUSB/ad2.html**
 
 ## Quick start
 
 1. Plug in the Analog Discovery 2. On Linux, download `detach.py` and run `python3 detach.py` (see below).
-2. Open the [hosted app](https://haxidermist.github.io/A2D/ad2.html) in Chrome or another Chromium browser.
+2. Open the [hosted app](https://haxidermist.github.io/AD2-WebUSB/ad2.html) in Chrome or another Chromium browser.
    It also works offline: download `ad2.html` and double-click it.
 3. Click **Connect** and choose "Digilent USB Device".
 
