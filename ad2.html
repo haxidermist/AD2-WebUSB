@@ -1,0 +1,1639 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AD2 WebUSB</title>
+<style>
+  :root { --bg: #f6f6f4; --fg: #1d1d1b; --mut: #6b6b66; --line: #d9d9d4; --card: #ffffff; --acc: #1f6feb; --ok: #1a7f37; --bad: #c62828;
+          --grid: #e6e6e1; --axis: #c9c9c3; --c1: #d97706; --c2: #2563eb; --trig: #9333ea; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #161615; --fg: #e8e8e4; --mut: #9a9a94; --line: #34342f; --card: #1f1f1d; --acc: #58a6ff;
+          --ok: #3fb950; --bad: #f47067; --grid: #2a2a27; --axis: #44443f; --c1: #f5a524; --c2: #6ea8ff; --trig: #c084fc; } }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }            /* .row / .bits set display, which would override the attribute */
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  p.sub { margin: 0 0 18px; color: var(--mut); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+  button, select, input[type=number] { font: inherit; padding: 6px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+  input[type=number] { width: 7em; padding: 6px 8px; }
+  button { cursor: pointer; } button.primary { background: var(--acc); border-color: var(--acc); color: #fff; }
+  button:disabled, select:disabled, input:disabled { opacity: .45; cursor: default; }
+  label { color: var(--mut); font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
+  .stat { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; font: 13px/1.5 ui-monospace, monospace; }
+  .stat dt { color: var(--mut); font-family: system-ui, sans-serif; }
+  .stat dd { margin: 0; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  .muted { color: var(--mut); }
+  canvas { width: 100%; height: 380px; display: block; border-radius: 6px; background: var(--card); }
+  .chips { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
+  .chip { display: flex; gap: 8px; align-items: baseline; }
+  .sw { width: 12px; height: 3px; border-radius: 2px; display: inline-block; transform: translateY(-3px); }
+  progress { width: 100%; height: 8px; margin-top: 10px; }
+  pre { margin: 0; max-height: 200px; overflow: auto; font: 12.5px/1.4 ui-monospace, monospace; white-space: pre-wrap; color: var(--mut); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } canvas { height: 280px; } }
+  /* left control panel: tiles + one slider */
+  #panel { position: fixed; left: 0; top: 0; bottom: 0; width: 360px; background: var(--card); border-right: 1px solid var(--line);
+           padding: 0 12px 16px; overflow-y: auto; transform: translateX(-100%); transition: transform .18s ease; z-index: 20; }
+  body.panel-open #panel { transform: none; }
+  body.panel-open { padding-left: 360px; }
+  @media (max-width: 860px) { body.panel-open { padding-left: 0; } #panel { box-shadow: 0 0 24px rgba(0,0,0,.25); } }
+  #popen { position: fixed; top: 12px; left: 12px; z-index: 19; }
+  body.panel-open #popen { display: none; }
+  .phead { display: flex; justify-content: space-between; align-items: center; padding: 14px 0 10px; }
+  .sbox { position: sticky; top: 0; z-index: 1; background: var(--card); padding: 4px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  .sbox .row { flex-wrap: nowrap; }
+  #sname { font-size: 13px; color: var(--mut); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #sval { font: 600 15px/1.2 ui-monospace, monospace; }
+  #sedit { width: 7.5em; padding: 3px 6px; font: 600 13.5px ui-monospace, monospace; text-align: right; border-radius: 6px;
+           border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+  #sedit:disabled { opacity: .4; }
+  #sunit { font-size: 12px; min-width: 2.2em; }
+  #slider { flex: 1; min-width: 0; accent-color: var(--acc); }
+  .sbox button { padding: 2px 10px; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .tgrp { grid-column: 1 / -1; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--mut); margin: 8px 2px 0; }
+  .tile { text-align: left; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); min-height: 54px;
+          display: flex; flex-direction: column; justify-content: space-between; gap: 3px; }
+  .tile .tl { font-size: 11.5px; color: var(--mut); }
+  .tile .tv { font: 600 13.5px/1.25 ui-monospace, monospace; word-break: break-word; }
+  .tile.var .tl::after { content: " ⇄"; opacity: .6; }
+  .tile.sel { outline: 2px solid var(--acc); outline-offset: -2px; }
+  .tile.on { border-color: var(--acc); background: color-mix(in srgb, var(--acc) 14%, var(--bg)); }
+  .tile.info { cursor: pointer; }
+  /* panel on the right (default): mirror the left-hand layout */
+  body.side-right #panel { left: auto; right: 0; border-right: 0; border-left: 1px solid var(--line); transform: translateX(100%); }
+  body.side-right.panel-open #panel { transform: none; }
+  body.side-right.panel-open { padding-left: 0; padding-right: 360px; }
+  body.side-right #popen { left: auto; right: 12px; }
+  body.side-right:not(.panel-open) .topbar { padding-left: 16px; padding-right: 130px; }
+  @media (max-width: 860px) { body.side-right.panel-open { padding-right: 0; } }
+  /* top status bar */
+  .topbar { position: sticky; top: 0; z-index: 15; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center;
+            padding: 8px 16px; background: var(--card); border-bottom: 1px solid var(--line); font-size: 14px; }
+  .topbar .brand { font-size: 16px; margin-right: 4px; }
+  .topbar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 2px; }
+  .topbar .kv { display: inline-flex; gap: 5px; align-items: baseline; font: 12.5px ui-monospace, monospace; }
+  .topbar .k { color: var(--mut); font: 12px system-ui, sans-serif; }
+  .topbar button { padding: 4px 10px; }
+  .topbar input[type=file] { font-size: 12.5px; max-width: 210px; }
+  .topbar progress { width: 120px; margin: 0; }
+  body:not(.panel-open) .topbar { padding-left: 130px; }
+  main { max-width: 1280px; }
+  /* bit editor for 16-bit masks (replaces the slider when a mask tile is selected) */
+  .bits { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; }
+  .bits button { padding: 3px 0; font: 11px ui-monospace, monospace; border-radius: 5px; }
+  .bits button.b1 { background: var(--acc); border-color: var(--acc); color: #fff; }
+  .tile.bits16 .tl::after { content: " ⊞"; opacity: .6; }
+  .tile.act .tl::after { content: " ▶"; opacity: .5; }
+  /* help mode tooltips */
+  #tip { position: fixed; z-index: 50; max-width: 300px; padding: 8px 11px; border-radius: 8px; font-size: 13px; line-height: 1.45;
+         background: var(--fg); color: var(--bg); box-shadow: 0 4px 18px rgba(0,0,0,.25); pointer-events: none; }
+  .helpbtn[aria-pressed="true"] { background: var(--acc); border-color: var(--acc); color: #fff; }
+  body.help [data-help] { cursor: help; }
+  /* ===== DSPECT look and feel (dark field-instrument theme) ===== */
+  :root, :root:not([data-theme="light"]) {
+    --bg: #151515; --card: #1d211f; --plot: #1a1a1a; --fg: #d9dfcf; --mut: #8b958d; --line: #2c322e; --frame: #4b554f;
+    --tile: #3a4640; --tile-hi: #46544c; --acc: #ffb400; --ok: #33e05a; --bad: #ff4d5a; --teal: #0d6a73; --teal-ink: #9fe3e6;
+    --grid: #2b302d; --axis: #4b554f; --c1: #ffd23f; --c2: #4fd1ff; --trig: #ff8a3d;
+    --cond: "Roboto Condensed", "Arial Narrow", "Liberation Sans Narrow", "DejaVu Sans Condensed", sans-serif-condensed, sans-serif;
+    --mono: ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--fg); font-family: var(--cond); -webkit-tap-highlight-color: transparent; }
+  .muted, .k { color: var(--mut); }
+  /* status bar */
+  .topbar { margin: 8px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); top: 8px; font-family: var(--cond); }
+  .topbar .brand { color: var(--ok); font-size: 20px; font-weight: 700; letter-spacing: .5px; text-shadow: 0 0 8px rgba(51,224,90,.35); white-space: nowrap; }
+  .topbar .brand span { color: var(--mut); font-weight: 400; font-size: 16px; text-shadow: none; }
+  .topbar .brand .ver { color: var(--ok); opacity: .7; font-size: 14px; font-weight: 700; }
+  .topbar .kv { font-family: var(--mono); }
+  .topbar .sep { background: var(--line); }
+  .leds { display: inline-flex; gap: 6px; align-items: center; }
+  .led { width: 11px; height: 11px; border-radius: 50%; background: #333a36; display: inline-block; }
+  .led.on.g { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .led.on.y { background: var(--acc); box-shadow: 0 0 6px var(--acc); }
+  .led.on.r { background: #ff6a3d; box-shadow: 0 0 6px #ff6a3d; }
+  button, select, input[type=number], input[type=text], #sedit { font-family: var(--cond); }
+  .topbar button, .phead button { background: var(--tile); color: var(--fg); border: 0; border-radius: 6px; font-weight: 700; letter-spacing: .5px; padding: 5px 12px; }
+  .topbar button.primary { background: var(--teal); color: var(--teal-ink); }
+  .topbar button:active, .phead button:active { background: var(--ok); color: #102010; }
+  .topbar button:disabled { background: #262b28; color: var(--mut); }
+  .helpbtn[aria-pressed="true"] { background: var(--acc) !important; color: #1a1a1a !important; }
+  .topbar input[type=file] { color: var(--mut); }
+  /* displays */
+  .card { background: var(--plot); border: 2px solid var(--frame); border-radius: 6px; }
+  canvas { background: var(--plot); }
+  .chips, .chip, #sinfo, #linfo { font-family: var(--mono); font-size: 13px; }
+  .chip b { font-family: var(--cond); font-size: 15px; }
+  pre#log { color: var(--mut); font-family: var(--mono); }
+  /* control panel */
+  #panel { background: var(--bg); border-color: var(--line); }
+  .phead b { color: var(--ok); font-size: 18px; letter-spacing: .5px; }
+  .sbox { background: var(--bg); border-bottom-color: var(--line); }
+  #sname { font: 15px var(--mono); color: var(--mut); letter-spacing: 1px; }
+  #sedit { background: #0c0c0c; color: var(--acc); border: 1px solid var(--frame); font: 700 16px var(--mono); }
+  #sunit { color: var(--mut); font-family: var(--mono); }
+  .sbox button { background: var(--tile); color: var(--fg); border: 0; border-radius: 6px; font: 700 18px var(--cond); padding: 6px 12px; }
+  input[type=range]#slider { -webkit-appearance: none; appearance: none; height: 54px; background: transparent; margin: 0; }
+  #slider::-webkit-slider-runnable-track { height: 14px; border-radius: 7px; background: #0c0c0c; }
+  #slider::-moz-range-track { height: 14px; border-radius: 7px; background: #0c0c0c; }
+  #slider::-webkit-slider-thumb { -webkit-appearance: none; width: 50px; height: 50px; margin-top: -18px; border-radius: 50%;
+    background: radial-gradient(circle, #5a5130 0 4px, #b09a50 5px 100%); border: 2px solid #6c5f32; box-shadow: 0 2px 6px #0009; }
+  #slider::-moz-range-thumb { width: 46px; height: 46px; border-radius: 50%; background: #b09a50; border: 2px solid #6c5f32; }
+  #slider:disabled { opacity: .35; }
+  .bits button { background: var(--tile); color: var(--fg); border: 0; font-family: var(--mono); }
+  .bits button.b1 { background: var(--acc); color: #1a1a1a; }
+  .tiles { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .tgrp { color: var(--mut); font: 700 12px var(--cond); letter-spacing: 1.5px; }
+  .tile { background: var(--tile); border: 0; border-radius: 6px; color: var(--fg); font-family: var(--cond); min-height: 62px;
+          padding: 4px 3px; align-items: center; justify-content: center; text-align: center; gap: 2px;
+          transition: background .1s, transform .06s; }
+  .tile:hover { background: var(--tile-hi); }
+  .tile:active { transform: scale(.96); }
+  .tile .tl { font: 700 14px/1.05 var(--cond); color: var(--fg); letter-spacing: .5px; }
+  .tile .tv { font: 700 16px/1.1 var(--cond); font-variant-numeric: tabular-nums; color: var(--fg); }
+  .tile.var .tl::after, .tile.bits16 .tl::after, .tile.act .tl::after { content: none; }
+  .tile.sel { background: var(--acc); outline: none; }
+  .tile.sel .tl, .tile.sel .tv { color: #1a1a1a; }
+  .tile.on { background: #2f6a3f; border: 0; }
+  .tile.act:active, .tile.flash { background: var(--ok); }
+  .tile.act:active .tl, .tile.act:active .tv, .tile.flash .tl, .tile.flash .tv { color: #102010; }
+  #popen { background: var(--acc); color: #1a1a1a; border: 0; border-radius: 6px; font: 700 15px var(--cond); }
+  /* hover help, DSPECT tip style */
+  #tip { background: #262b28; border: 1px solid var(--frame); color: var(--fg); font: 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; box-shadow: 0 4px 14px #0000008c; }
+</style>
+</head>
+<body>
+<button id="popen" data-help="Show the control panel.">☰ Controls</button>
+<aside id="panel" aria-label="Control panel">
+  <div class="phead"><b>Controls</b><span class="row" style="gap:6px"><button class="helpbtn" aria-pressed="false" data-help="Help mode: when on, hovering a control shows what it does and how to change it. Click again to turn it off.">ⓘ Help</button><button id="pside" data-help="Move this panel to the other side of the window (default right). Remembered across reloads.">⇆</button><button id="pclose" data-help="Hide this panel. Bring it back with the ☰ Controls button.">Hide</button></span></div>
+  <div class="sbox">
+    <div class="row" style="margin-bottom:6px"><span id="sname">Select a ⇄ or ⊞ tile to adjust</span><span id="sval" hidden></span>
+      <input id="sedit" disabled spellcheck="false" aria-label="Exact value" data-help="Type an exact value for the selected tile and press Enter (Esc cancels). Numbers accept SI suffixes: 2.5k, 10M, 250m. Lists accept the option text or a number. Masks take hex."><span id="sunit" class="muted"></span></div>
+    <div class="row" id="srow"><button id="sminus" aria-label="Decrease" data-help="One fine step down.">−</button><input type="range" id="slider" min="0" max="1000" value="0" disabled data-help="Adjusts the selected ⇄ tile. Frequency and pattern rate move on a log scale; lists step through their options. Arrow keys work when focused."><button id="splus" aria-label="Increase" data-help="One fine step up.">+</button></div>
+    <div class="bits" id="bits" hidden data-help="Mask bits, DIO15 at top left to DIO0 at bottom right. Click a bit to flip it; lit = 1."></div>
+  </div>
+  <div class="tiles" id="tiles"></div>
+</aside>
+
+<header class="topbar">
+  <b class="brand">AD2 <span>WebUSB</span> <span class="ver">k</span></b>
+  <span class="leds"><span class="led g" id="l_link" title="link"></span><span class="led y" id="l_trig" title="trigger"></span><span class="led r" id="l_ovr" title="ADC clipped"></span></span>
+  <button id="connect" class="primary" data-help="Connect to the Analog Discovery 2 over WebUSB. The first time, Chrome asks you to pick “Digilent USB Device”. Close WaveForms and any cap run first: only one program can hold the board.">Connect</button>
+  <button id="disconnect" disabled data-help="Release the board so WaveForms or cap can use it. Outputs keep their last state.">Disconnect</button>
+  <span id="state" class="muted">not connected</span>
+  <span class="sep"></span>
+  <span class="kv" data-help="FPGA IDCODE read over JTAG. 44002093 = XC6SLX16."><span class="k">ID</span><span id="idcode">–</span></span>
+  <span class="kv" data-help="Bitstream running in the FPGA. “a5 build k” = our scope/AWG/LA design; anything else means program build k first."><span class="k">Design</span><span id="sig">–</span></span>
+  <span class="kv" data-help="PLL lock and the 100 MHz sample clock. If they look wrong, press Init clocks + ADC."><span class="k">Clocks</span><span id="clk">–</span></span>
+  <span class="kv" data-help="Calibration in use, read from the board’s EEPROM (IC37). This board keeps its own measured constants."><span class="k">Cal</span><span id="cal">–</span></span>
+  <span class="sep"></span>
+  <button id="progk" disabled data-help="Load our build k bitstream into the FPGA (about 0.4 s). Press Init clocks + ADC afterwards.">Program build k</button>
+  <button id="init" disabled data-help="Start the PLL and sample clock and power-cycle the ADC. Needed once after programming, before the first capture.">Init clocks + ADC</button>
+  <input type="file" id="file" accept=".bit" data-help="Choose your own .bit file for the XC6SLX16, then press Program file.">
+  <button id="progf" disabled data-help="Load the chosen .bit file into the FPGA. Controls only work with designs that implement build k’s registers.">Program file</button>
+  <progress id="prog" max="1" value="0" hidden></progress>
+  <span style="flex:1"></span>
+  <button class="helpbtn" aria-pressed="false" data-help="Help mode: when on, hovering a control shows what it does and how to change it. Click again to turn it off.">ⓘ Help</button>
+</header>
+<div id="tip" role="tooltip" hidden></div>
+
+<main>
+  <div class="card">
+    <canvas id="cv"></canvas>
+    <div class="chips">
+      <div class="chip"><span class="sw" style="background:var(--c1)"></span><b>CH1</b><span id="s1" class="muted">–</span></div>
+      <div class="chip"><span class="sw" style="background:var(--c2)"></span><b>CH2</b><span id="s2" class="muted">–</span></div>
+      <div class="chip muted" id="sinfo"></div>
+    </div>
+  </div>
+  <div class="card">
+    <canvas id="lcv" style="height:420px"></canvas>
+    <div class="chips"><div class="chip muted" id="linfo"></div></div>
+  </div>
+  <div class="card"><pre id="log"></pre></div>
+</main>
+
+<!-- settings store: the tiles read and write these; they are not shown -->
+<div id="store" hidden>
+  <select id="rate"><option value="100e6">100 MS/s</option><option value="50e6">50 MS/s</option><option value="10e6">10 MS/s</option>
+    <option value="1e6" selected>1 MS/s</option><option value="100e3">100 kS/s</option><option value="10e3">10 kS/s</option></select>
+  <select id="r1"><option value="1">±2.7 V</option><option value="0">±25 V</option></select>
+  <select id="r2"><option value="1">±2.7 V</option><option value="0">±25 V</option></select>
+  <select id="avgon"><option value="0">off</option><option value="1">on</option></select>
+  <select id="avgN"><option>2</option><option>4</option><option>8</option><option selected>16</option><option>32</option>
+    <option>64</option><option>128</option><option>256</option></select>
+  <select id="vis1"><option value="1">shown</option><option value="0">hidden</option></select><select id="vis2"><option value="1">shown</option><option value="0">hidden</option></select>
+  <select id="view"><option value="scope">Scope</option><option value="spec">Spectrum</option></select>
+  <select id="swin"><option value="bh">Blackman-Harris</option><option value="hann">Hann</option><option value="flat">Flat-top</option><option value="rect">Rectangular</option></select>
+  <select id="strace"><option value="live">live</option><option value="avg">average</option><option value="max">max hold</option></select>
+  <select id="sN"><option>2</option><option>4</option><option selected>8</option><option>16</option><option>32</option><option>64</option><option>128</option></select>
+  <input type="number" id="sref" value="10"><select id="sdiv"><option>1</option><option>2</option><option>5</option><option selected>10</option><option>20</option></select>
+  <input type="number" id="fmax" value="50000000"><select id="flog"><option value="lin">linear</option><option value="log">log</option></select>
+  <select id="smark"><option value="1">on</option><option value="0">off</option></select>
+  <input type="number" id="vdiv1" value="0.5"><input type="number" id="vdiv2" value="0.5"><input type="number" id="off1" value="0"><input type="number" id="off2" value="0">
+  <select id="tsrc"><option value="off">off</option><option value="0">CH1</option><option value="1">CH2</option></select>
+  <select id="tedge"><option value="r">rising</option><option value="f">falling</option></select>
+  <input type="number" id="tlev" value="0"><button id="single"></button><button id="run">Run</button>
+  <select id="shape"><option>sine</option><option>square</option><option>triangle</option><option>saw</option><option value="sinc">sinc</option><option value="prbs">spread (PRBS)</option></select>
+  <input type="number" id="slobes" value="8"><input type="number" id="sorder" value="7">
+  <input type="number" id="freq" value="1000"><input type="number" id="a1" value="1"><input type="number" id="a2" value="1"><input type="number" id="ph" value="0">
+  <button id="awgon"></button><button id="awgoff"></button><span id="awgst"></span>
+  <input type="number" id="vp" value="1"><input type="number" id="vm" value="1"><input type="checkbox" id="vpon"><input type="checkbox" id="vmon">
+  <button id="supply"></button><button id="suppoff"></button>
+  <select id="pmode"><option value="usb">USB</option><option value="ext">external (AUX)</option></select>
+  <button id="mon"></button><span id="supst">off</span><span id="musb">–</span><span id="maux">–</span><span id="mtmp">–</span>
+  <select id="lrate"><option value="100e6">100 MS/s</option><option value="50e6">50 MS/s</option><option value="10e6" selected>10 MS/s</option>
+    <option value="1e6">1 MS/s</option><option value="100e3">100 kS/s</option><option value="10e3">10 kS/s</option></select>
+  <select id="lch"><option value="8">DIO 0–7</option><option value="16" selected>DIO 0–15</option></select>
+  <select id="ltrig"><option value="off">off</option><option value="on">pattern / edge</option></select>
+  <input id="lmask" value="0000"><input id="lval" value="0000">
+  <select id="ledge"><option value="-1">none</option></select>
+  <select id="lpol"><option value="r">rising</option><option value="f">falling</option></select>
+  <select id="lzoom"><option value="1">1×</option><option value="8">8×</option><option value="64">64×</option><option value="512">512×</option></select>
+  <button id="lsingle"></button><button id="lrun">Run</button>
+  <input id="pgmask" value="00ff"><input type="number" id="pgrate" value="1000000"><button id="pgon"></button><button id="pgoff"></button><span id="pgst"></span>
+  <button id="latest"></button>
+  <input id="dout" value="0000"><input id="doe" value="0000"><button id="dset"></button><button id="dread"></button><span id="dpins"></span>
+</div>
+<script type="module">
+// ---- ad2.js (inlined by standalone.py) ----
+// AD2 driver over WebUSB: FT232H (MPSSE JTAG + sync FIFO) and the capture/k design. Port of capture/cap.c and
+// rawjtag.py; protocol in PROTOCOL.md. JTAG writes are queued and only sent when a reply is needed (or on flush),
+// so bit-banged buses (ADC SPI, offset DAC) cost one USB transfer instead of hundreds.
+'use strict';
+const IR = { IDCODE: 0x09, JPROGRAM: 0x0b, CFG_IN: 0x05, JSTART: 0x0c, USER1: 0x02, USER2: 0x03, PORT: 0x1a, USER4: 0x1b, BYPASS: 0x3f };
+const B = (...a) => Uint8Array.from(a.flat());
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const cat = parts => { const n = parts.reduce((s, x) => s + x.length, 0), o = new Uint8Array(n); let p = 0; for (const x of parts) { o.set(x, p); p += x.length; } return o; };
+
+class AD2 {
+  constructor(device, log = () => {}) {
+    this.dev = device; this.log = log; this.q = []; this.rx = []; this.curIr = -1; this.mode = 'none';
+    this.BG_OUT = 0x0815FF79; this.BG_OE = 0xDB17C00F;   // control-port background (design reset values)
+    this.cal = defaultCal();
+  }
+  // ---------- FTDI ----------
+  async ctrl(rq, val, idx = 0) {
+    const r = await this.dev.controlTransferOut({ requestType: 'vendor', recipient: 'device', request: rq, value: val, index: idx });
+    if (r.status !== 'ok') throw new Error(`control 0x${rq.toString(16)} ${r.status}`);
+  }
+  async out(bytes) {
+    for (let p = 0; p < bytes.length; p += 65536) {
+      const r = await this.dev.transferOut(2, bytes.subarray(p, p + 65536));
+      if (r.status !== 'ok') throw new Error('bulk out ' + r.status);
+    }
+  }
+  async inp(want, timeoutMs = 2000) {      // strips the 2 FTDI status bytes at the start of each 512-byte packet
+    const t0 = performance.now();
+    while (this.rx.length < want) {
+      const r = await this.dev.transferIn(1, 16384);
+      const d = new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength);
+      for (let k = 0; k < d.length; k += 512) for (let i = k + 2; i < Math.min(k + 512, d.length); i++) this.rx.push(d[i]);
+      if (performance.now() - t0 > timeoutMs) throw new Error(`USB read timeout: ${this.rx.length} of ${want}`);
+    }
+    return Uint8Array.from(this.rx.splice(0, want));
+  }
+  async open() {
+    await this.dev.open();
+    if (!this.dev.configuration) await this.dev.selectConfiguration(1);
+    try { await this.dev.claimInterface(0); }
+    catch (e) {                                      // usually the kernel's ftdi_sio bound itself after a replug
+      throw new Error('cannot claim the AD2: on Linux run "python3 detach.py" (releases the ftdi_sio serial driver after a replug, see README), or close WaveForms / other AD2 tabs');
+    }
+    await this.jtagMode();
+  }
+  async close() {
+    try { if (this.mode === 'jtag') await this.jtagRelease(); } finally { await this.dev.releaseInterface(0); await this.dev.close(); }
+  }
+  // ---------- JTAG (MPSSE) ----------
+  async jtagMode() {
+    for (const [rq, v] of [[0, 0], [0, 1], [0, 2], [6, 0], [7, 0], [9, 2], [0x0b, 0x0000], [0x0b, 0x0200]]) await this.ctrl(rq, v);
+    await sleep(30); this.rx = [];
+    let synced = false;
+    for (let i = 0; i < 20 && !synced; i++) {        // an invalid opcode is echoed as FA AA
+      await this.out(B(0xaa));
+      try { const r = await this.inp(2, 300); synced = r[0] === 0xfa && r[1] === 0xaa; } catch { this.rx = []; }
+    }
+    if (!synced) throw new Error('MPSSE sync failed');
+    await this.ctrl(9, 16);
+    // 10 MHz TCK; ADBUS0 TCK, 1 TDI, 3 TMS out (TMS high); ACBUS7 high = JTAG enable
+    await this.out(B(0x85, 0x8a, 0x97, 0x8d, 0x86, 0x02, 0x00, 0x80, 0x08, 0x0b, 0x82, 0x80, 0x80));
+    this.tms(0x1f, 5); this.tms(0, 1); await this.flush();
+    this.curIr = -1; this.mode = 'jtag';
+  }
+  async jtagRelease() {
+    this.tms(0x1f, 5);
+    this.q.push(B(0x80, 0x00, 0x00, 0x82, 0x00, 0x80, 0x82, 0x00, 0x00)); await this.flush();
+    await this.ctrl(0x0b, 0x0000); this.curIr = -1; this.mode = 'none';
+  }
+  async flush() { if (this.q.length) { const c = cat(this.q); this.q = []; await this.out(c); } }
+  tms(bits, n, tdi = 0) { this.q.push(B(0x4b, n - 1, (bits & 0x7f) | tdi << 7)); }
+  // queue a shift of nbits (LSB first) from Shift-xR, last bit with TMS=1; returns a reader when rd, else null
+  shift(data, nbits, rd = false) {
+    const nb = nbits - 1, full = nb >> 3, rem = nb & 7;
+    for (let p = 0; p < full; p += 8192) { const k = Math.min(8192, full - p); this.q.push(B(rd ? 0x39 : 0x19, (k - 1) & 255, (k - 1) >> 8), data.subarray(p, p + k)); }
+    if (rem) this.q.push(B(rd ? 0x3b : 0x1b, rem - 1, data[full]));
+    const lb = data[(nbits - 1) >> 3] >> ((nbits - 1) & 7) & 1;
+    this.q.push(B(rd ? 0x6b : 0x4b, 0, 0x01 | lb << 7));
+    if (!rd) return null;
+    return async () => {
+      this.q.push(B(0x87)); await this.flush();
+      const r = await this.inp(full + (rem ? 1 : 0) + 1);
+      let v = 0n, p = 0n;
+      for (let i = 0; i < full; i++, p += 8n) v |= BigInt(r[i]) << p;
+      if (rem) { v |= BigInt(r[full] >> (8 - rem)) << p; p += BigInt(rem); }   // bit reads arrive MSB-justified
+      return v | BigInt(r[r.length - 1] >> 7 & 1) << p;
+    };
+  }
+  ir(code) {                                         // queued; Run-Test/Idle -> Shift-IR -> Run-Test/Idle
+    if (code === this.curIr) return;
+    this.tms(0b0011, 4); this.shift(B(code), 6); this.tms(0b01, 2); this.curIr = code;
+  }
+  async irRead(code) {                               // IR capture value (bit 4 INIT_B, bit 5 DONE)
+    this.tms(0b0011, 4); const rd = this.shift(B(code), 6, true); this.tms(0b01, 2); this.curIr = code; return Number(await rd());
+  }
+  drBytes(value, nbits) { const b = new Uint8Array((nbits + 7) >> 3); let x = BigInt(value); for (let i = 0; i < b.length; i++, x >>= 8n) b[i] = Number(x & 255n); return b; }
+  drw(value, nbits) { this.tms(0b001, 3); this.shift(this.drBytes(value, nbits), nbits); this.tms(0b01, 2); }      // queued write
+  async dr(value, nbits) { this.tms(0b001, 3); const rd = this.shift(this.drBytes(value, nbits), nbits, true); this.tms(0b01, 2); return rd(); }
+  async idcode() { this.ir(IR.IDCODE); return Number(await this.dr(0, 32)); }
+  async status() { this.ir(IR.USER2); return this.dr(0, 56); }
+  async signature() { return Number(await this.status() >> 48n); }
+  // ---------- configuration ----------
+  async program(bit, progress = () => {}) {
+    const raw = bitPayload(bit), rev = raw.map(x => REV[x]);
+    this.awgReady = false;                           // new design: the AWG must be reset and aligned again
+    this.ir(IR.JPROGRAM); this.curIr = -1;
+    let c = 0;
+    for (let i = 0; i < 100; i++) { await this.flush(); await sleep(10); c = await this.irRead(IR.BYPASS); if (c & 0x10) break; }
+    this.log(`JPROGRAM: IR capture ${c.toString(16)}`);
+    this.ir(IR.CFG_IN); this.tms(0b001, 3); await this.flush();
+    const CH = 65536, t0 = performance.now();
+    for (let p = 0; p < rev.length; p += CH) {
+      const part = rev.subarray(p, Math.min(p + CH, rev.length));
+      if (p + CH < rev.length) for (let q = 0; q < part.length; q += 8192) { const k = Math.min(8192, part.length - q); this.q.push(B(0x19, (k - 1) & 255, (k - 1) >> 8), part.subarray(q, q + k)); }
+      else this.shift(part, part.length * 8);
+      await this.flush(); progress((p + part.length) / rev.length);
+    }
+    this.tms(0b01, 2);
+    this.log(`bitstream ${raw.length} bytes in ${((performance.now() - t0) / 1000).toFixed(2)} s`);
+    this.ir(IR.JSTART); this.q.push(B(0x8f, 3, 0)); this.tms(0x1f, 5); this.tms(0, 1); this.curIr = -1;
+    c = await this.irRead(IR.BYPASS);
+    if (!(c & 0x20)) throw new Error(`DONE not set (IR capture ${c.toString(16)})`);
+    return c;
+  }
+  // ---------- control port (USER3 = IR 0x1a, 64 bits {oe, out}) ----------
+  pscan(outv, oe, msk) {                             // queued: bits in msk take outv/oe, the rest keep the background
+    outv = ((outv & msk) | (this.BG_OUT & ~msk)) >>> 0; oe = ((oe & msk) | (this.BG_OE & ~msk)) >>> 0;
+    this.ir(IR.PORT); this.drw(BigInt(outv) | BigInt(oe) << 32n, 64);
+  }
+  async pscanRead(outv, oe, msk) {
+    outv = ((outv & msk) | (this.BG_OUT & ~msk)) >>> 0; oe = ((oe & msk) | (this.BG_OE & ~msk)) >>> 0;
+    this.ir(IR.PORT); return Number(await this.dr(BigInt(outv) | BigInt(oe) << 32n, 64) & 0xffffffffn);
+  }
+  async portPeek() {                                 // capture, shift the 64 bits out, shift the same bits back, update
+    this.ir(IR.PORT); this.tms(0b001, 3);
+    const z = new Uint8Array(8), parts = [];
+    this.q.push(B(0x39, 7, 0), z, B(0x87)); await this.flush();
+    const o = await this.inp(8);
+    this.q.push(B(0x19, 6, 0), o.subarray(0, 7), B(0x1b, 6, o[7]), B(0x4b, 0, 0x01 | (o[7] >> 7) << 7)); this.tms(0b01, 2); await this.flush();
+    let v = 0n; for (let i = 0; i < 8; i++) v |= BigInt(o[i]) << BigInt(8 * i); return v;
+  }
+  async syncBackground() {                           // as cap: keep SET_FS (30/31), M4 (25) and A11's drive (24 oe)
+    const p = await this.portPeek(), pin = Number(p & 0xffffffffn), oe = Number(p >> 32n);
+    const keep = (3 << 30 | 1 << 25) >>> 0;
+    this.BG_OUT = ((this.BG_OUT & ~keep) | (pin & oe & keep)) >>> 0;
+    this.BG_OE = ((this.BG_OE & ~(1 << 24)) | (oe & 1 << 24)) >>> 0;
+  }
+  adcW(addr, val) {                                  // AD9648 SPI on port bits 0 (CSB) 1 (SCLK) 2 (SDIO)
+    const C = 1, K = 2, D = 4, oe = 7, word = (addr & 0x1fff) << 8 | (val & 0xff);
+    this.pscan(C, oe, 7); this.pscan(0, oe, 7);
+    for (let i = 23; i >= 0; i--) { const b = word >> i & 1 ? D : 0; this.pscan(b, oe, 7); this.pscan(b | K, oe, 7); }
+    this.pscan(0, oe, 7); this.pscan(C, oe, 7);
+  }
+  async pllW(w) {                                    // ADF4360 via USER1 (40 bits); wait while busy
+    this.ir(IR.USER1); this.drw(BigInt(w & 0xffffff) | 1n << 36n, 40);
+    for (let i = 0; i < 100; i++) if (!((await this.dr(0, 40)) >> 16n & 1n)) break;
+  }
+  dacW(sy, sk, dn, w) {                              // AD5643 offset DAC: SYNC low, 24 bits on SCLK falling edges
+    const S = 1 << sy, K = 1 << sk, D = 1 << dn, oe = S | K | D, m = oe;
+    this.pscan(S | K, oe, m); this.pscan(K, oe, m);
+    for (let i = 23; i >= 0; i--) { const b = w >> i & 1 ? D : 0; this.pscan(b | K, oe, m); this.pscan(b, oe, m); }
+    this.pscan(K, oe, m); this.pscan(S | K, oe, m); this.pscan(0, 0, 0);
+  }
+  async init() {                                     // cap init: clocks, PLL, ADC power-cycle at 100 MHz, ADC registers
+    this.BG_OUT = 0x0815FF79; this.BG_OE = 0xDB17C00F; this.awgReady = false;   // the PLL also clocks the AWG DAC
+    this.pscan(1, 7, 7); await this.flush(); await sleep(100);
+    await this.pllW(20 << 2 | 1 | 1 << 18);
+    await this.pllW(3 << 17 | 3 << 14 | 3 << 12 | 1 << 8 | 6 << 5 | 1 << 2);
+    await sleep(15); await this.pllW(200 << 8 | 2 << 2 | 2); await sleep(50);
+    this.adcW(0x05, 0x03); this.adcW(0x0b, 0x01); this.adcW(0xff, 0x01); await this.flush(); await sleep(10);
+    this.adcW(0x08, 0x01); this.adcW(0xff, 0x01); await this.flush(); await sleep(500);
+    this.adcW(0x08, 0x00); this.adcW(0xff, 0x01); await this.flush(); await sleep(500);
+    this.adcW(0x14, 0x20); this.adcW(0x17, 0x81); this.adcW(0x0d, 0x00); this.adcW(0xff, 0x01); await this.flush(); await sleep(10);
+    const s = await this.status();
+    return { sig: Number(s >> 48n), pllLock: Number(s >> 41n & 1n), mhz: Number(s & 0x1ffffn) / 1000, dcm: Number(s >> 42n & 1n) };
+  }
+  // ---------- calibration (IC37 via USER2 sig 69) ----------
+  async loadCal() {
+    this.ir(IR.USER2); this.drw(0x69n << 48n, 56);
+    const raw = new Uint8Array(134);
+    for (let a = 0; a < 67; a++) {
+      await this.flush(); await sleep(1);
+      const r = await this.dr(0x69n << 48n | BigInt((a + 1) % 67), 56);
+      if (Number(r >> 48n & 0xffn) !== 0xa7 || (r >> 24n & 1n) || Number(r >> 16n & 0xffn) !== a) { this.drw(0, 56); await this.flush(); throw new Error(`IC37 read failed at word ${a}`); }
+      raw[2 * a] = Number(r & 0xffn); raw[2 * a + 1] = Number(r >> 8n & 0xffn);
+    }
+    this.drw(0, 56); await this.flush();
+    if (raw[0] !== 0xc6 || raw[1] !== 0xde) throw new Error('IC37 header wrong');
+    this.cal = calFromTable(raw); return this.cal;
+  }
+  // ---------- open-drain I2C on two port bits (low = driven 0, high = released to the board pull-ups) ----------
+  i2(sda, scl) { const oe = (sda ? 0 : this.i2s) | (scl ? 0 : this.i2k); this.pscan(0, oe, this.i2s | this.i2k); }
+  async i2r(sda, scl) { const oe = (sda ? 0 : this.i2s) | (scl ? 0 : this.i2k); return this.pscanRead(0, oe, this.i2s | this.i2k); }
+  i2bus(sdaBit, sclBit) { this.i2s = 1 << sdaBit; this.i2k = 1 << sclBit; }
+  i2start() { this.i2(1, 1); this.i2(0, 1); this.i2(0, 0); }
+  i2stop() { this.i2(0, 0); this.i2(0, 1); this.i2(1, 1); this.pscan(0, 0, 0); }
+  i2byte(v) { for (let i = 7; i >= 0; i--) { const b = v >> i & 1; this.i2(b, 0); this.i2(b, 1); this.i2(b, 0); } this.i2(1, 0); this.i2(1, 1); this.i2(1, 0); }   // ACK not checked
+  // clock-stretch-aware high phase: release SCL, then read the bus until SCL is really high; returns the pins sampled
+  // while SCL is high (SDA valid). Used by the reading transactions (monitors); the DAC writes stay batched.
+  async i2clk(sda) {
+    this.i2(sda, 1);
+    for (let i = 0; i < 100; i++) { const r = await this.i2r(sda, 1); if (r & this.i2k) return r; }
+    throw new Error('I2C clock held low');
+  }
+  async i2byteAck(v) {
+    for (let i = 7; i >= 0; i--) { const b = v >> i & 1; this.i2(b, 0); await this.i2clk(b); this.i2(b, 0); }
+    this.i2(1, 0); const r = await this.i2clk(1); this.i2(1, 0); return !(r & this.i2s);
+  }
+  async i2rd(ack) {
+    let v = 0; for (let i = 7; i >= 0; i--) { this.i2(1, 0); const r = await this.i2clk(1); v |= (r & this.i2s ? 1 : 0) << i; }
+    this.i2(1, 0); this.i2(!ack, 0); await this.i2clk(!ack); this.i2(!ack, 0); return v;
+  }
+  dac5645(ch, code, update = true) {                 // AD5645R at 0x1f on bits 11 (SDA) / 13 (SCL): write [and update] channel
+    this.i2bus(11, 13); this.i2start(); this.i2byte(0x1f << 1); this.i2byte((update ? 0x18 : 0x00) | ch); this.i2byte(code >> 8 & 255); this.i2byte(code & 255); this.i2stop();
+  }
+  // ---------- AWG (AD9717 on port bits 27 /CS, 28 SCLK, 29 SDIO; D8 = bit 19 reset; SET_FS bits 30/31) ----------
+  awgW(addr, val) {
+    const C = 1 << 27, K = 1 << 28, D = 1 << 29, oe = C | K | D, word = (addr & 0x1f) << 8 | (val & 0xff);
+    this.pscan(C, oe, oe); this.pscan(0, oe, oe);
+    for (let i = 15; i >= 0; i--) { const b = word >> i & 1 ? D : 0; this.pscan(b, oe, oe); this.pscan(b | K, oe, oe); }
+    this.pscan(0, oe, oe); this.pscan(C, oe, oe); this.pscan(0, 0, 0);
+  }
+  awgCfg(load, play, opts, last) { this.ir(IR.USER2); this.drw(0x5Bn << 48n | BigInt(last & 0x1fff) << 16n | BigInt((opts & 3) << 3 | play << 2 | load << 1), 56); }
+  ddsSet(f, on) { const w = BigInt(Math.round(f / 100e6 * 4294967296)) & 0xffffffffn; this.ir(IR.USER2); this.drw(0x68n << 48n | BigInt(on ? 1 : 0) << 32n | w, 56); }
+  static ddsActual(f) { return Math.round(f / 100e6 * 4294967296) * 100e6 / 4294967296; }
+  async awgInit() {                                  // cap awginit: D8 reset pulse, AD9717 registers, DAC clock alignment
+    if (await this.signature() !== 0xa5) throw new Error('AWG needs build k running: Program build k, then Init');
+    const R = 1 << 19; this.pscan(R, R, R); await this.flush(); await sleep(1); this.pscan(0, R, R); this.pscan(0, 0, 0); await this.flush(); await sleep(1);
+    this.awgW(0x01, 0x81); this.awgW(0x02, 0x84); this.awgW(0x0f, 0xc5); this.awgW(0x14, 0xcb);
+    this.awgCfg(0, 0, 0, 0); this.ir(IR.USER2); this.drw(0x5Bn << 48n | 1n << 5n, 56); await this.flush(); await sleep(1);
+    this.awgCfg(0, 0, 0, 0); await this.flush(); await sleep(10); this.awgReady = true;
+  }
+  awgTable(A, Bt, n) {                               // USER4 load of n words {B, A}; the first shifted word is a dummy
+    const nb = 32 * (n + 1), b = new Uint8Array(nb / 8);
+    for (let k = 0; k < n; k++) { const w = ((Bt[k] & 0x3fff) << 16 | (A[k] & 0x3fff)) >>> 0; for (let j = 0; j < 4; j++) b[4 * (k + 1) + j] = w >> 8 * j & 255; }
+    this.awgCfg(1, 0, 0, n - 1);
+    this.ir(IR.USER4); this.tms(0b001, 3); this.shift(b, nb); this.tms(0b01, 2);
+  }
+  // shape sine|square|triangle|saw, f Hz, amplitudes (V peak) per channel, phase of W2 in degrees
+  // opt: { lobes } for sinc (zero crossings each side), { order } for prbs (LFSR length, 2^order - 1 chips per cycle)
+  async fgen(shape, f, amp = [1, 1], phase2 = 0, opt = {}) {
+    if (!this.awgReady) await this.awgInit();
+    const N = 8192, cal = this.cal, hi = [], T = [new Int16Array(N), new Int16Array(N)], p2 = phase2 * Math.PI / 180;
+    const chips = shape === 'prbs' ? prbs(opt.order || 7) : null, lobes = Math.max(1, Math.min(100, Math.round(opt.lobes || 8)));
+    for (let c = 0; c < 2; c++) {
+      const am = Math.min(5, Math.abs(amp[c])); hi[c] = am > 1.25 ? 1 : 0;
+      for (let k = 0; k < N; k++) {
+        const ph = 2 * Math.PI * k / N + (c ? p2 : 0), u = ((ph / (2 * Math.PI)) % 1 + 1) % 1;
+        let y;
+        if (shape === 'square') y = u < 0.5 ? 1 : -1;
+        else if (shape === 'triangle') y = u < 0.5 ? 4 * u - 1 : 3 - 4 * u;
+        else if (shape === 'saw') y = 2 * u - 1;
+        else if (shape === 'sinc') { const x = (u - 0.5) * 2 * Math.PI * lobes; y = x === 0 ? 1 : Math.sin(x) / x; }   // peak 1 mid-cycle
+        else if (shape === 'prbs') y = chips[Math.min(chips.length - 1, Math.floor(u * chips.length))];               // ±1 chips
+        else y = Math.sin(ph);
+        T[c][k] = Math.max(-8192, Math.min(8191, Math.round(-y * am / cal.awk[c][hi[c]])));
+      }
+    }
+    this.ddsSet(0, 0);
+    this.dac5645(1, Math.round(cal.awz[0][hi[0]])); this.dac5645(3, Math.round(cal.awz[1][hi[1]]));   // 0 V offsets W1 (B) / W2 (D)
+    this.BG_OUT = ((this.BG_OUT & ~(3 << 30)) | hi[0] << 30 | hi[1] << 31) >>> 0; this.pscan(0, 0, 0);
+    this.awgTable(T[0], T[1], N); this.awgCfg(0, 1, 0, N - 1); this.ddsSet(f, 1); await this.flush();
+    return { f: AD2.ddsActual(f), large: hi };
+  }
+  async awgStop() {                                  // both outputs to a constant 0 V
+    if (!this.awgReady) await this.awgInit();
+    this.ddsSet(0, 0); this.awgTable([0], [0], 1); this.awgCfg(0, 1, 0, 0); await this.flush();
+  }
+  // ---------- user supplies (AD5645R ch C = V+, ch A = V-; USER2 sig 66 = converter enables {P2, N5}) ----------
+  async supplies(vp, vm) {
+    vp = Math.abs(vp); vm = Math.abs(vm);
+    for (const v of [vp, vm]) if (v && (v < 0.5 || v > 5)) throw new Error('supplies: 0 (off) or 0.5..5 V');
+    const code = (v, k) => v ? Math.max(0, Math.min(65535, Math.round((this.cal.sv0[k] - v) / this.cal.ssl[k]))) : 65535;
+    this.dac5645(0, code(vm, 1)); this.dac5645(2, code(vp, 0));
+    this.ir(IR.USER2); this.drw(0x66n << 48n | BigInt(vp || vm ? 3 : 0), 56); await this.flush();
+  }
+  async adm(addr) {                                  // ADM1177 (0x5A USB input, 0x58 AUX input): volts and sense mV, null if silent
+    // the ADM1177 stretches SCL after the command and the read address (conversion); this bit-bang does not watch SCL,
+    // so pause there — without it every read bit lands one clock late (values halve). cap is slow enough not to notice.
+    this.i2bus(23, 22); this.i2start(); let ok = await this.i2byteAck(addr << 1); ok = await this.i2byteAck(0x05) && ok;
+    await this.flush(); await sleep(5);
+    this.i2start(); ok = await this.i2byteAck(addr << 1 | 1) && ok;
+    await this.flush(); await sleep(2);
+    const b = [await this.i2rd(1), await this.i2rd(1), await this.i2rd(0)]; this.i2stop(); await this.flush();
+    return ok ? { v: (b[0] << 4 | b[2] >> 4) * 26.35 / 4096, mv: (b[1] << 4 | (b[2] & 15)) * 105.84 / 4096 } : null;
+  }
+  async temperature() {                              // AD7415 at 0x49
+    this.i2bus(23, 22); this.i2start(); let ok = await this.i2byteAck(0x49 << 1); ok = await this.i2byteAck(0) && ok;
+    this.i2start(); ok = await this.i2byteAck(0x49 << 1 | 1) && ok;
+    const t = await this.i2rd(1) << 8 | await this.i2rd(0); this.i2stop(); await this.flush();
+    return ok ? ((t << 16 >> 16) >> 6) * 0.25 : null;
+  }
+  powerMode() { return this.BG_OUT >> 25 & 1 ? 'external' : 'USB'; }
+  async setPowerMode(ext) {                          // external = M4 (bit 25) high + A11 (bit 24) released; needs AUX powered
+    if (ext) { const a = await this.adm(0x58); if (!a || a.v < 4.5) throw new Error('AUX input not powered: staying in USB mode'); }
+    this.BG_OUT = ((this.BG_OUT & ~(1 << 25 | 1 << 24)) | (ext ? 1 << 25 : 0)) >>> 0;
+    this.BG_OE = (ext ? this.BG_OE & ~(1 << 24) : this.BG_OE | 1 << 24) >>> 0;
+    this.pscan(0, 0, 0); await this.flush();
+  }
+  scopeOffsets(hg1, hg2) {
+    this.dacW(18, 20, 17, 3 << 19 | 0 << 16 | this.cal.scd[0][hg1] << 2);
+    this.dacW(18, 20, 17, 3 << 19 | 1 << 16 | this.cal.scd[1][hg2] << 2);
+  }
+  // ---------- sync FIFO ----------
+  async fifoMode() {
+    await this.jtagRelease();
+    await this.ctrl(0x02, 0, 0x0100);                // RTS/CTS flow control
+    await this.ctrl(0x01, 0x0202);                   // RTS on
+    await this.ctrl(0x09, 2);
+    await this.ctrl(0x00, 1); await this.ctrl(0x00, 2);
+    await this.ctrl(0x0b, 0x40ff); this.rx = []; this.mode = 'fifo';
+  }
+  async fifoRead(n) {                                // request/reply: each request byte (0) grants 512 reply bytes
+    const buf = new Uint8Array(n);
+    for (let got = 0; got < n; ) {
+      const c = Math.min(64000, n - got);
+      await this.out(new Uint8Array(c / 512));
+      buf.set(await this.inp(c, 3000), got); got += c;
+    }
+    return buf;
+  }
+  // ---------- scope ----------
+  // one acquisition: rate in S/s (100 MS/s / integer), hg = [ch1, ch2] high gain (+/-2.7 V) else +/-25 V,
+  // trig = null or { ch: 0|1, level: V, falling: bool, hyst: V, pre: samples, autoMs }
+  async acquire({ rate = 1e6, hg = [false, false], trig = null } = {}) {
+    const N = 8192, cal = this.cal, h = hg.map(Number);
+    let dl = Math.round(100e6 / rate) - 1; dl = Math.max(0, Math.min(0xffffff, dl));
+    if (this.lastHg !== h.join()) {
+      this.scopeOffsets(h[0], h[1]);
+      this.ir(IR.USER2); this.drw(0x5Cn << 48n | BigInt((h[0] ? 8 : 4) | (h[1] ? 2 : 1)), 56);
+      await this.flush(); await sleep(200); this.lastHg = h.join();
+    }
+    let tcfg = 0n, pre = 0, autoMs = 0;
+    if (trig) {
+      const c = trig.ch, sc = cal.scv[c][h[c]], z = cal.scz[c][h[c]];
+      const lc = Math.round(z + trig.level / sc), hc = Math.max(1, Math.round((trig.hyst || 0.02) / sc));
+      if (lc - hc < 0 || lc + hc > 16383) throw new Error('trigger level outside this range');
+      tcfg = 1n << 30n | BigInt(trig.falling ? 1 : 0) << 29n | BigInt(c) << 28n | BigInt(hc) << 14n | BigInt(lc);
+      pre = trig.pre ?? N / 2; autoMs = trig.autoMs ?? 100;
+    }
+    const { raw, trigFlag, forced } = await this.captureRaw(dl, pre, tcfg, autoMs, 0n, 5);
+    const ch1 = new Float32Array(N), ch2 = new Float32Array(N);
+    const p6 = b => (b >> 1 & 1) | (b >> 3) << 1;      // payload: D1 = bit 0, D3..D7 = bits 1..5
+    const s1 = cal.scv[0][h[0]], z1 = cal.scz[0][h[0]], s2 = cal.scv[1][h[1]], z2 = cal.scz[1][h[1]];
+    const clip = [false, false];
+    for (let k = 0; k < N; k++) {
+      let w = 0; for (let j = 0; j < 5; j++) w += p6(raw[5 * k + j]) * 2 ** (6 * j);
+      const c1 = w % 16384, c2 = Math.floor(w / 16384) % 16384;
+      if (c1 === 0 || c1 === 16383) clip[0] = true; if (c2 === 0 || c2 === 16383) clip[1] = true;
+      ch1[k] = (c1 - z1) * s1; ch2[k] = (c2 - z2) * s2;
+    }
+    return { ch1, ch2, dt: (dl + 1) * 1e-8, pre, triggered: !!trig && !!trigFlag && !forced, forced, clip };
+  }
+  // shared capture engine: arm (5D pre/dec + mode bits, 5E trigger, 5A start), wait (forcing a trigger after autoMs),
+  // then read the snapshot over the FIFO. S = FIFO bytes per memory word (5 scope, 6 LA/average). N = 8192 words.
+  async captureRaw(dl, pre, tcfg, autoMs, lacfg, S) {
+    const N = 8192;
+    this.ir(IR.USER2);
+    this.drw(0x5Dn << 48n | lacfg | BigInt(pre & 0x1fff) << 24n | BigInt(dl), 56);
+    this.drw(0x5En << 48n | tcfg, 56);
+    this.drw(0x5An << 48n | 1n, 56);
+    const per = (dl + 1) * 1e-8 * N, trig = tcfg >> 30n & 1n, t0 = performance.now(); let forced = false;
+    for (;;) {
+      const s = await this.status();
+      if (s >> 40n & 1n) break;
+      const el = performance.now() - t0;
+      if (trig && autoMs > 0 && !forced && el > autoMs + pre * (dl + 1) * 1e-5) { this.drw(0x5An << 48n | 2n, 56); forced = true; }
+      if (el > per * 1000 + 1500 + (trig ? (autoMs > 0 ? autoMs : 600000) : 0)) throw new Error('capture never finished');
+      if (per > 0.05) await sleep(Math.min(50, per * 200));
+    }
+    this.ir(IR.USER4); const hd = Number(await this.dr(0, 32));
+    await this.fifoMode();
+    let raw;
+    try { raw = await this.fifoRead(S * N); } finally { await this.jtagMode(); }
+    return { raw, trigFlag: hd >> 23 & 1, trigHalf: hd >> 22 & 1, forced };
+  }
+  // ---------- logic analyser + digital I/O (DIO0..15) ----------
+  // rate 100 MS/s / (n+1), or 200e6 (both clock edges; experimental). trig = null or
+  // { mask, val (16-bit pattern), ch (edge channel or -1), falling, pre (samples), autoMs }
+  async la({ rate = 1e6, trig = null } = {}) {
+    const r200 = rate > 150e6, dl = r200 ? 0 : Math.max(0, Math.min(0xffffff, Math.round(100e6 / rate) - 1));
+    const t = trig || { mask: 0, val: 0, ch: -1, falling: false };
+    this.ir(IR.USER2);
+    this.drw(0x61n << 48n | BigInt(t.falling ? 1 : 0) << 37n | BigInt(t.ch >= 0 ? 1 : 0) << 36n | BigInt((t.ch >= 0 ? t.ch : 0) & 15) << 32n
+             | BigInt(t.val & 0xffff) << 16n | BigInt(t.mask & 0xffff), 56);
+    const pre = trig ? (trig.pre ?? 8192) : 0, wpre = (pre + 1) >> 1;   // memory words hold two samples
+    const r = await this.captureRaw(dl, wpre, trig ? 1n << 30n : 0n, trig ? (trig.autoMs ?? 200) : 0, 1n << 38n | BigInt(r200 ? 1 : 0) << 39n, 6);
+    const p6 = b => (b >> 1 & 1) | (b >> 3) << 1, s = new Uint16Array(16384);
+    for (let k = 0; k < 8192; k++) {
+      let w = 0; for (let j = 0; j < 6; j++) w += p6(r.raw[6 * k + j]) * 2 ** (6 * j);
+      s[2 * k] = w % 65536; s[2 * k + 1] = Math.floor(w / 65536) % 65536;
+    }
+    let tl = 2 * wpre; if (trig && r.trigFlag) tl += r.trigHalf;      // sample index of the trigger event
+    return { s, dt: r200 ? 5e-9 : (dl + 1) * 1e-8, tl, triggered: !!trig && !!r.trigFlag && !r.forced, forced: r.forced };
+  }
+  async dio(out, oe) {                               // static outputs (sig 60 {oe, out}); returns the pins (sig 62)
+    this.ir(IR.USER2); this.drw(0x60n << 48n | BigInt(oe & 0xffff) << 16n | BigInt(out & 0xffff), 56);
+    return this.dioRead();
+  }
+  async dioRead() { this.ir(IR.USER2); this.drw(0x62n << 48n, 56); return Number(await this.dr(0, 56) & 0xffffn); }
+  async pgLoad(words, rate, oeMask, once = false) {  // pattern generator: up to 2048 words at 100 MS/s / (n+1) on oeMask pins
+    const n = Math.min(2048, words.length); if (!n) throw new Error('empty pattern');
+    const dl = Math.max(0, Math.min(0xffffff, Math.round(100e6 / rate) - 1));
+    this.ir(IR.USER2); this.drw(0x64n << 48n | 2n, 56);              // stop, load enable
+    const nb = 32 * (n + 1), b = new Uint8Array(nb / 8);             // first word is a dummy
+    for (let k = 0; k < n; k++) for (let j = 0; j < 4; j++) b[4 * (k + 1) + j] = (words[k] & 0xffff) >> 8 * j & 255;
+    this.ir(IR.USER4); this.tms(0b001, 3); this.shift(b, nb); this.tms(0b01, 2);
+    this.ir(IR.USER2); this.drw(0x60n << 48n | BigInt(oeMask & 0xffff) << 16n, 56);
+    this.drw(0x65n << 48n | BigInt(dl), 56);
+    this.drw(0x64n << 48n | BigInt(n - 1) << 16n | BigInt(once ? 4 : 0) | 1n, 56);
+    await this.flush(); return 100e6 / (dl + 1);
+  }
+  async pgStop() { this.ir(IR.USER2); this.drw(0x64n << 48n, 56); this.drw(0x60n << 48n, 56); await this.flush(); }   // stop, release pins
+}
+
+// ---------- helpers ----------
+// maximal-length LFSR (Fibonacci) as ±1 chips, period 2^order - 1; feedback taps from standard primitive polynomials
+const LFSR_TAPS = { 3: [3, 2], 4: [4, 3], 5: [5, 3], 6: [6, 5], 7: [7, 6], 8: [8, 6, 5, 4], 9: [9, 5], 10: [10, 7], 11: [11, 9], 12: [12, 6, 4, 1] };
+function prbs(order) {
+  order = Math.max(3, Math.min(12, Math.round(order))); const taps = LFSR_TAPS[order], n = (1 << order) - 1, out = new Int8Array(n);
+  let r = (1 << order) - 1;                          // any non-zero seed
+  for (let i = 0; i < n; i++) {
+    out[i] = r & 1 ? 1 : -1;
+    let fb = 0; for (const t of taps) fb ^= r >> (order - t) & 1;   // right-shifting register: tap t is bit order - t
+    r = (r >> 1) | fb << (order - 1);
+  }
+  return out;
+}
+const REV = new Uint8Array(256).map((_, x) => { let r = 0; for (let i = 0; i < 8; i++) r |= (x >> i & 1) << (7 - i); return r; });
+function bitPayload(buf) {                    // .bit: header fields a..d, then 'e' + u32 length + data
+  const f = new Uint8Array(buf), dv = new DataView(buf); let p = 13;
+  while (f[p] !== 0x65) { p += 3 + dv.getUint16(p + 1); if (p >= f.length) throw new Error('not a .bit file'); }
+  return f.subarray(p + 5, p + 5 + dv.getUint32(p + 1));
+}
+// measured constants of the development board (cap.c defaults), used there instead of its EEPROM table, whose offsets are 4-44 mV worse
+function defaultCal() {
+  return { source: 'measured constants', scv: [[3.647e-3, 0.3316e-3], [3.650e-3, 0.3324e-3]], scz: [[8192.7, 8192.7], [8347.1, 8347.1]], scd: [[8113, 8113], [8135, 8135]],
+           awk: [[158.84e-6, 632.28e-6], [158.88e-6, 631.67e-6]], awz: [[0x80b5, 0x80b5], [0x7f64, 0x7f64]], sv0: [5.40675, 5.34125], ssl: [8.9098e-5, 8.9245e-5] };
+}
+const OWN_F0 = 0xbcd9f3cd, OWN_F12 = 0xbc1acf29;
+function calFromTable(raw) {
+  const dv = new DataView(raw.buffer), f = [], u = [];
+  for (let k = 0; k < 28; k++) { f.push(dv.getFloat32(2 + 4 * k, true)); u.push(dv.getUint32(2 + 4 * k, true)); }
+  if (u[0] === OWN_F0 && u[12] === OWN_F12) return { ...defaultCal(), source: 'measured constants (this board)' };
+  const cal = { source: 'IC37 table', scv: [[0, 0], [0, 0]], scz: [[0, 0], [0, 0]], scd: [[0, 0], [0, 0]], awk: [[0, 0], [0, 0]], awz: [[0, 0], [0, 0]], sv0: [0, 0], ssl: [0, 0] };
+  for (let c = 0; c < 2; c++) for (let r = 0; r < 2; r++) {   // AWG: gain x 0.978 for the post-D8-reset AD9717 state
+    const a = f.slice(c * 6 + r * 3, c * 6 + r * 3 + 3);
+    cal.awk[c][r] = (r ? 5.46 : 1.365) * (1 + a[0]) * 4 / 32767 * 0.978; cal.awz[c][r] = (1 - a[2] / (1 + a[1]) / 5.5) * 32768;
+  }
+  for (let k = 0; k < 2; k++) { const g = f[24 + 2 * k], o = f[25 + 2 * k]; cal.sv0[k] = 5.4575 * (1 + g) + (k ? -o : o); cal.ssl[k] = 5.9 / 65536 * (1 + g); }
+  for (let c = 0; c < 2; c++) for (let hg = 0; hg < 2; hg++) {
+    const t = f.slice(12 + c * 6 + hg * 3, 15 + c * 6 + hg * 3);
+    const A = 1.16 * 1040 / (hg ? 220 : 20) * (1 + t[0]), Bv = 0.985 * (1 + t[1] - t[0]) * A, C = t[2] / ((1 + t[0]) * (1 + t[1] - t[0]));
+    const d = Math.max(0, Math.min(16383, Math.round(8192 * (1 + C / Bv))));
+    cal.scv[c][hg] = A / 16384; cal.scd[c][hg] = d;
+    cal.scz[c][hg] = 8192 + (8192 * (1 + C / Bv) - d) * (Bv / 8192) / (A / 16384);
+  }
+  return cal;
+}
+
+// ---- build k bitstream, gzipped ----
+const K_TOP_GZ = "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";
+const kTopBit = () => new Response(new Blob([Uint8Array.from(atob(K_TOP_GZ), c => c.charCodeAt(0))]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+// ---- page ----
+const $ = id => document.getElementById(id);
+const log = s => {
+  const l = $('log'); l.textContent += s + '\n'; l.scrollTop = l.scrollHeight;
+  if (location.protocol !== 'file:') fetch('log', { method: 'POST', body: s }).catch(() => {});   // serve.py appends it to page.log (best effort)
+};
+const hex = (v, n) => (v >>> 0).toString(16).padStart(n, '0');
+// every outside call into the driver is queued: a tile change during Run waits for the current capture instead of
+// interleaving USB traffic. Calls the driver makes on itself use the real object, so they are not queued again.
+let devChain = Promise.resolve();
+function serialised(obj) {
+  return new Proxy(obj, { get(t, k) {
+    const v = t[k];
+    if (typeof v !== 'function' || v.constructor.name !== 'AsyncFunction') return v;
+    return (...a) => { const p = devChain.then(() => v.apply(t, a)); devChain = p.catch(() => {}); return p; };
+  } });
+}
+let ad = null, running = false, busyNow = false, last = null, laRunning = false, lalast = null;
+
+function setBusy(on) {
+  busyNow = on;
+  for (const id of ['disconnect', 'progk', 'progf', 'init', 'single', 'awgon', 'awgoff', 'supply', 'suppoff', 'pmode', 'mon', 'lsingle', 'pgon', 'pgoff', 'dset', 'dread', 'latest']) $(id).disabled = on || !ad;
+  $('lrun').disabled = !ad || (on && !laRunning);
+  $('run').disabled = !ad || (on && !running);
+  $('connect').disabled = on || !!ad;
+}
+async function guard(fn) {
+  setBusy(true);
+  try { await fn(); } catch (e) { log('error: ' + e.message); $('state').innerHTML = `<span class="bad">${e.message}</span>`; running = false; $('run').textContent = 'Run'; }
+  setBusy(false);
+}
+async function refresh() {
+  const id = await ad.idcode(), s = await ad.status(), sig = Number(s >> 48n);
+  $('idcode').innerHTML = `${hex(id, 8)} ` + ((id & 0x0fffffff) === 0x4002093 ? '<span class="ok">XC6SLX16</span>' : '<span class="bad">unexpected</span>');
+  $('sig').innerHTML = sig === 0xa5 ? 'a5 <span class="ok">build k</span>' : `<span class="bad">${hex(sig, 2)} — not build k</span>`;
+  $('clk').textContent = sig === 0xa5 ? `PLL lock ${Number(s >> 41n & 1n)}, sample clock ${(Number(s & 0x1ffffn) / 1000).toFixed(3)} MHz` : '–';
+  log(`IDCODE ${hex(id, 8)}, signature ${hex(sig, 2)}`);
+  return sig === 0xa5;
+}
+async function afterDesign() {
+  await ad.syncBackground();
+  try { const c = await ad.loadCal(); $('cal').textContent = c.source; log('calibration: ' + c.source); }
+  catch (e) { $('cal').textContent = 'defaults (' + e.message + ')'; log('calibration: ' + e.message); }
+  await monitors();
+}
+// ---------- start-up: Connect brings the board to a ready state on its own ----------
+// blank FPGA -> load build k; clocks not running -> Init; then calibration, monitors and one warm-up capture (the
+// first FIFO session after Init times out). Another design already loaded is left alone (not ready for these tools).
+let boardReady = false;
+const stage = (txt, ok = false) => { $('state').innerHTML = ok ? `<span class="ok">${txt}</span>` : txt; log('start-up: ' + txt); };
+const needReady = what => { if (!boardReady) throw new Error(`board not ready for ${what}: press Connect (it loads and initialises build k)`); };
+async function clocksRunning() { const s = await ad.status(); return !!(s >> 41n & 1n) && Math.abs(Number(s & 0x1ffffn) / 1000 - 100) < 0.5; }
+async function initBoard() {
+  stage('initialising clocks + ADC');
+  const r = await ad.init(); ad.lastHg = null;
+  log(`init: signature ${hex(r.sig, 2)}, PLL lock ${r.pllLock}, ${r.mhz.toFixed(3)} MHz, DCM ${r.dcm}`);
+  if (!r.pllLock || Math.abs(r.mhz - 100) > 0.5) throw new Error(`Init did not lock the clocks (PLL ${r.pllLock}, ${r.mhz.toFixed(3)} MHz)`);
+}
+async function finishStartup() {
+  await refresh(); stage('loading calibration'); await afterDesign();
+  stage('warm-up capture');
+  try { await ad.acquire({ rate: 1e6 }); } catch { try { await ad.acquire({ rate: 1e6 }); } catch (e) { throw new Error('warm-up capture failed: ' + e.message); } }
+  boardReady = true; stage('ready', true); renderTiles();
+}
+async function startup() {
+  boardReady = false;
+  stage('checking the FPGA');
+  let sig = await ad.signature();
+  if (sig === 0x00 || sig === 0xff) {               // power-up state: nothing loaded
+    stage('FPGA blank: loading build k');
+    await prog(await kTopBit(), 'build k', false);
+    sig = await ad.signature();
+  }
+  if (sig !== 0xa5) { await refresh(); stage(`another design is loaded (signature ${hex(sig, 2)}): use Program build k to use these tools`); return; }
+  if (!(await clocksRunning())) await initBoard(); else log('start-up: clocks already running, Init skipped');
+  await finishStartup();
+}
+$('connect').onclick = () => guard(async () => {
+  if (!navigator.usb) throw new Error('WebUSB not available in this browser');
+  const known = (await navigator.usb.getDevices()).find(x => x.vendorId === 0x0403 && x.productId === 0x6014);
+  const d = known || await navigator.usb.requestDevice({ filters: [{ vendorId: 0x0403, productId: 0x6014 }] });
+  ad = serialised(new AD2(d, log)); await ad.open();
+  log('connected');
+  await startup();
+});
+$('disconnect').onclick = () => guard(async () => {
+  running = false; laRunning = false; boardReady = false;
+  try { await ad.close(); } finally { ad = null; }
+  $('state').textContent = 'not connected'; log('disconnected');
+});
+// load a bitstream; for build k (signature a5) continue straight into Init and the rest of the start-up
+async function prog(buf, name, thenStart = true) {
+  boardReady = false; running = false; laRunning = false; avgReset(); specReset();
+  const pg = $('prog'); pg.hidden = false; pg.value = 0;
+  log(`programming ${name}`);
+  const c = await ad.program(buf, f => pg.value = f);
+  log(`DONE (IR capture ${hex(c, 2)})`); ad.lastHg = null; $('awgst').textContent = '';
+  pg.hidden = true;
+  if (!thenStart) return;
+  if (await ad.signature() === 0xa5) { await initBoard(); await finishStartup(); }
+  else { await refresh(); stage(`${name} loaded (not build k): the scope, AWG and LA tiles need build k`); }
+}
+$('progk').onclick = () => guard(async () => prog(await kTopBit(), 'build k'));
+$('progf').onclick = () => guard(async () => { const f = $('file').files[0]; if (!f) throw new Error('choose a .bit file'); await prog(await f.arrayBuffer(), f.name); });
+$('init').onclick = () => guard(async () => {
+  if (await ad.signature() !== 0xa5) throw new Error('Init needs build k: press Program build k');
+  boardReady = false; await initBoard(); $('awgst').textContent = ''; await finishStartup();
+});
+
+// ---------- scope ----------
+function opts() {
+  const t = $('tsrc').value;
+  return { rate: Number($('rate').value), hg: [$('r1').value === '1', $('r2').value === '1'],
+           trig: t === 'off' ? null : { ch: Number(t), level: Number($('tlev').value), falling: $('tedge').value === 'f', autoMs: 200 } };
+}
+// ---------- triggered waveform averaging ----------
+// The FPGA detects the trigger on every 100 MS/s sample but stores samples on a free-running decimation grid, so
+// captures line up only to within one stored sample. Each triggered capture is therefore shifted so that the trigger
+// channel's interpolated level crossing lands exactly on the trigger index, then folded into a running mean
+// (cumulative up to N captures, then exponential with weight 1/N). Forced (auto) captures are left out.
+const avg = { key: '', n: 0, m1: null, m2: null, skipped: 0, unaligned: 0 };
+const avgKey = o => JSON.stringify([o.rate, o.hg, o.trig && [o.trig.ch, o.trig.level, o.trig.falling], $('avgN').value]);
+function avgReset() { avg.key = ''; avg.n = 0; avg.m1 = avg.m2 = null; avg.skipped = avg.unaligned = 0; }
+function crossing(a, pre, level, falling) {          // fractional index of the level crossing nearest pre, or null
+  let best = null;
+  for (let k = Math.max(1, pre - 4); k <= Math.min(a.length - 1, pre + 4); k++) {
+    const p = a[k - 1], q = a[k];
+    if (falling ? (p > level && q <= level) : (p < level && q >= level)) {
+      const t = k - 1 + (level - p) / (q - p);
+      if (best === null || Math.abs(t - pre) < Math.abs(best - pre)) best = t;
+    }
+  }
+  return best;
+}
+function shifted(a, s) {                              // out[i] = a(i + s), linear interpolation, edges held
+  const n = a.length, out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = Math.min(n - 1, Math.max(0, i + s)), k = Math.min(n - 2, Math.floor(x)), f = x - k;
+    out[i] = a[k] + (a[k + 1] - a[k]) * f;
+  }
+  return out;
+}
+// returns what to display: the raw capture, or the current average when averaging is on
+function accumulate(r, o) {
+  const N = $('avgon').value === '1' ? Number($('avgN').value) : 1;
+  if (N <= 1) { if (avg.n) avgReset(); return { ch1: r.ch1, ch2: r.ch2, avgInfo: '' }; }
+  if (!o.trig) return { ch1: r.ch1, ch2: r.ch2, avgInfo: 'averaging needs a trigger' };
+  const key = avgKey(o); if (key !== avg.key) { avgReset(); avg.key = key; }
+  if (!r.triggered) {                               // no trigger: show the live capture (a held average looks frozen)
+    avg.skipped++; return { ch1: r.ch1, ch2: r.ch2, avgInfo: `no trigger: live trace, average ${avg.n}/${N} held` };
+  }
+  const src = o.trig.ch ? r.ch2 : r.ch1, tc = crossing(src, r.pre, o.trig.level, o.trig.falling);
+  let a1 = r.ch1, a2 = r.ch2;
+  if (tc === null) avg.unaligned++;
+  else { const sh = tc - r.pre; a1 = shifted(r.ch1, sh); a2 = shifted(r.ch2, sh); }
+  if (!avg.n) { avg.m1 = Float32Array.from(a1); avg.m2 = Float32Array.from(a2); avg.n = 1; }
+  else {
+    avg.n = Math.min(avg.n + 1, N); const w = 1 / avg.n;
+    for (let k = 0; k < a1.length; k++) { avg.m1[k] += (a1[k] - avg.m1[k]) * w; avg.m2[k] += (a2[k] - avg.m2[k]) * w; }
+  }
+  return { ch1: avg.m1, ch2: avg.m2, avgInfo: avgText(N) };
+}
+// least-squares sine fit at a known frequency (cycles per sample); returns the rms residual
+function sineResidual(a, fcs) {
+  let S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], R = [0, 0, 0];
+  for (let k = 0; k < a.length; k++) { const b = [Math.sin(2 * Math.PI * fcs * k), Math.cos(2 * Math.PI * fcs * k), 1];
+    for (let i = 0; i < 3; i++) { R[i] += b[i] * a[k]; for (let j = 0; j < 3; j++) S[i][j] += b[i] * b[j]; } }
+  for (let i = 0; i < 3; i++) for (let r = i + 1; r < 3; r++) { const m = S[r][i] / S[i][i]; for (let j = i; j < 3; j++) S[r][j] -= m * S[i][j]; R[r] -= m * R[i]; }
+  const c = [0, 0, 0]; for (let i = 2; i >= 0; i--) { let v = R[i]; for (let j = i + 1; j < 3; j++) v -= S[i][j] * c[j]; c[i] = v / S[i][i]; }
+  let e = 0; for (let k = 0; k < a.length; k++) { const d = a[k] - (c[0] * Math.sin(2 * Math.PI * fcs * k) + c[1] * Math.cos(2 * Math.PI * fcs * k) + c[2]); e += d * d; }
+  return { rms: Math.sqrt(e / a.length), amp: Math.hypot(c[0], c[1]) };
+}
+// one-click check: 1 kHz 1 V sine on W2 (wired to CH2), 1 MS/s, trigger CH2 rising at 0 V, average 16 over 20 captures;
+// logs the residual noise around a fitted sine for a single capture and for the average, then restores the settings
+async function avgSelfTest() {
+  if (!ad) { log('Averaging self-test: not connected'); return; }
+  needReady('the averaging self-test');
+  const ids = ['rate', 'vdiv2', 'tsrc', 'tedge', 'tlev', 'avgon', 'avgN', 'shape', 'freq', 'a1', 'a2', 'ph'], saved = ids.map(id => $(id).value), awgWas = awgIsOn();
+  const set = (id, v) => { $(id).value = v; fire(id); };
+  log('Averaging self-test: 1 kHz 1 V sine on W2 -> CH2, 1 MS/s, trigger CH2 rising 0 V, average 16, 20 captures');
+  try {
+    for (const [id, v] of [['rate', '1e6'], ['vdiv2', '0.5'], ['tsrc', '1'], ['tedge', 'r'], ['tlev', '0'], ['avgon', '1'], ['avgN', '16'], ['shape', 'sine'], ['freq', '1000'], ['a1', '1'], ['a2', '1'], ['ph', '0']]) set(id, v);
+    syncRange();
+    const g = await ad.fgen('sine', 1000, [1, 1], 0), fcs = g.f / 1e6;
+    avgReset(); let first = null, trig = 0, o = opts(), d;
+    for (let i = 0; i < 20; i++) {
+      let r; try { r = await ad.acquire(o); } catch (e) { log('  retry after ' + e.message); r = await ad.acquire(o); }
+      if (r.triggered) { trig++; if (!first) first = r.ch2; }
+      d = accumulate(r, o); last = { ...r, ch1: d.ch1, ch2: d.ch2, avgInfo: d.avgInfo, o, ms: 0 }; draw();
+    }
+    if (!first) { log('  no capture triggered: is W2 wired to CH2?'); return; }
+    const s1 = sineResidual(first, fcs), sa = sineResidual(last.ch2, fcs);
+    log(`  ${trig}/20 triggered, ${d.avgInfo}`);
+    log(`  single capture: amplitude ${s1.amp.toFixed(4)} V, noise ${(s1.rms * 1e3).toFixed(2)} mV rms`);
+    log(`  average:        amplitude ${sa.amp.toFixed(4)} V, noise ${(sa.rms * 1e3).toFixed(2)} mV rms (√16 would give ${(s1.rms * 1e3 / 4).toFixed(2)} mV)`);
+  } finally {
+    ids.forEach((id, i) => set(id, saved[i])); syncRange();
+    if (!awgWas) { await ad.awgStop(); $('awgst').textContent = 'stopped (0 V)'; } else await ad.fgen($('shape').value, Number($('freq').value), [Number($('a1').value), Number($('a2').value)], Number($('ph').value), awgOpt());
+    log('Averaging self-test done, settings restored'); renderTiles();
+  }
+}
+const avgText = N => `avg ${avg.n}/${N}` + (avg.skipped ? `, ${avg.skipped} untriggered skipped` : '') + (avg.unaligned ? `, ${avg.unaligned} unaligned` : '');
+async function shot() {
+  needReady('the scope');
+  const t0 = performance.now(), o = opts();
+  let r;
+  try { r = await ad.acquire(o); }
+  catch (e) { log('capture failed (' + e.message + '), retrying once'); r = await ad.acquire(o); }   // first FIFO session after init can fail
+  const d = accumulate(r, o);
+  specUpdate(r.ch1, r.ch2, r.dt);
+  last = { ...r, ch1: d.ch1, ch2: d.ch2, raw1: r.ch1, raw2: r.ch2, avgInfo: d.avgInfo, o, ms: performance.now() - t0 }; draw();
+  if (!running || performance.now() - (shot.logged || 0) > 2000) {          // results go to page.log (throttled while running)
+    shot.logged = performance.now();
+    const f = a => { const s = stats(a); return `mean ${s.mean.toFixed(3)} min ${s.mn.toFixed(3)} max ${s.mx.toFixed(3)}`; };
+    log(`capture ${(1 / r.dt / 1e6).toPrecision(3)} MS/s ${o.trig ? (r.triggered ? 'triggered' : 'auto') : 'untriggered'} ${last.ms.toFixed(0)} ms | CH1 ${f(last.ch1)} | CH2 ${f(last.ch2)}` + (last.avgInfo ? ' | ' + last.avgInfo : ''));
+  }
+}
+$('single').onclick = () => guard(shot);
+$('run').onclick = async () => {
+  if (running) { running = false; $('run').textContent = 'Run'; return; }
+  running = true; $('run').textContent = 'Stop'; setBusy(true); $('run').disabled = false;
+  try { while (running) await shot(); }
+  catch (e) { log('error: ' + e.message); $('state').innerHTML = `<span class="bad">${e.message}</span>`; }
+  running = false; $('run').textContent = 'Run'; setBusy(false);
+};
+for (const id of ['r1', 'r2', 'rate', 'tsrc', 'tlev', 'tedge', 'vdiv1', 'vdiv2', 'off1', 'off2', 'vis1', 'vis2', 'view', 'swin', 'strace', 'sN', 'sref', 'sdiv', 'fmax', 'flog', 'smark']) $(id).addEventListener('change', () => draw());
+
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function siTime(s) { const a = Math.abs(s); return a >= 1 ? s.toFixed(2) + ' s' : a >= 1e-3 ? (s * 1e3).toPrecision(3) + ' ms' : a >= 1e-6 ? (s * 1e6).toPrecision(3) + ' µs' : (s * 1e9).toPrecision(3) + ' ns'; }
+function stats(a) { let mn = Infinity, mx = -Infinity, s = 0; for (const v of a) { if (v < mn) mn = v; if (v > mx) mx = v; s += v; } return { mn, mx, mean: s / a.length }; }
+// ---------- spectrum analyser (FFT of each scope capture, computed in the page) ----------
+const NF = 8192;
+const fftTab = (() => {                             // bit reversal + twiddles for an 8192-point radix-2 FFT
+  const rev = new Uint32Array(NF), bits = Math.log2(NF);
+  for (let i = 0; i < NF; i++) { let r = 0; for (let b = 0; b < bits; b++) r |= (i >> b & 1) << (bits - 1 - b); rev[i] = r; }
+  const cs = new Float64Array(NF / 2), sn = new Float64Array(NF / 2);
+  for (let i = 0; i < NF / 2; i++) { cs[i] = Math.cos(2 * Math.PI * i / NF); sn[i] = -Math.sin(2 * Math.PI * i / NF); }
+  return { rev, cs, sn };
+})();
+function fft(re, im) {                               // in place, length NF
+  const { rev, cs, sn } = fftTab;
+  for (let i = 0; i < NF; i++) { const j = rev[i]; if (j > i) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+  for (let size = 2; size <= NF; size <<= 1) {
+    const half = size >> 1, step = NF / size;
+    for (let i = 0; i < NF; i += size) for (let j = 0; j < half; j++) {
+      const k = j * step, a = i + j, b = a + half, tr = re[b] * cs[k] - im[b] * sn[k], ti = re[b] * sn[k] + im[b] * cs[k];
+      re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+    }
+  }
+}
+const WINDOWS = {                                    // cosine-sum windows: coefficients a0, a1, ...
+  bh: { name: 'Blackman-Harris', a: [0.35875, 0.48829, 0.14128, 0.01168] },
+  hann: { name: 'Hann', a: [0.5, 0.5] },
+  flat: { name: 'Flat-top', a: [0.21557895, 0.41663158, 0.277263158, 0.083578947, 0.006947368] },
+  rect: { name: 'Rectangular', a: [1] },
+};
+const winCache = {};
+function windowOf(key) {                             // samples, coherent gain, equivalent noise bandwidth (bins)
+  if (winCache[key]) return winCache[key];
+  const a = WINDOWS[key].a, w = new Float64Array(NF); let s1 = 0, s2 = 0;
+  for (let n = 0; n < NF; n++) { let v = 0; for (let k = 0; k < a.length; k++) v += (k % 2 ? -1 : 1) * a[k] * Math.cos(2 * Math.PI * k * n / NF); w[n] = v; s1 += v; s2 += v * v; }
+  return winCache[key] = { w, cg: s1 / NF, enbw: NF * s2 / (s1 * s1) };
+}
+// amplitude spectrum in volts peak per bin (0..NF/2), calibrated so a sine of amplitude A reads A at its bin
+function ampSpectrum(x, key) {
+  const { w, cg } = windowOf(key), re = new Float64Array(NF), im = new Float64Array(NF);
+  let mean = 0; for (let n = 0; n < NF; n++) mean += x[n]; mean /= NF;
+  for (let n = 0; n < NF; n++) re[n] = (x[n] - mean) * w[n];     // DC removed: it would hide everything near 0 Hz
+  fft(re, im);
+  const A = new Float64Array(NF / 2 + 1);
+  for (let k = 1; k <= NF / 2; k++) A[k] = 2 * Math.hypot(re[k], im[k]) / (NF * cg);
+  A[0] = Math.abs(mean); return A;
+}
+const spec = { key: '', n: 0, p: [null, null] };     // per channel: power (V peak squared) per bin
+function specReset() { spec.key = ''; spec.n = 0; spec.p = [null, null]; }
+function specUpdate(x1, x2, dt) {
+  const win = $('swin').value, mode = $('strace').value, N = Number($('sN').value);
+  const key = JSON.stringify([win, mode, N, dt, $('r1').value, $('r2').value]); if (key !== spec.key) { specReset(); spec.key = key; }
+  const now = [x1, x2].map(x => { const A = ampSpectrum(x, win), P = new Float64Array(A.length); for (let k = 0; k < A.length; k++) P[k] = A[k] * A[k]; return P; });
+  if (!spec.n || mode === 'live') { spec.p = now; spec.n = 1; return; }
+  spec.n = mode === 'avg' ? Math.min(spec.n + 1, N) : spec.n + 1;
+  for (let c = 0; c < 2; c++) {
+    const P = spec.p[c], Q = now[c];
+    if (mode === 'max') for (let k = 0; k < P.length; k++) { if (Q[k] > P[k]) P[k] = Q[k]; }
+    else { const w = 1 / spec.n; for (let k = 0; k < P.length; k++) P[k] += (Q[k] - P[k]) * w; }
+  }
+}
+const dBV = p => 10 * Math.log10(Math.max(p, 1e-30) / 2);   // power of a peak amplitude -> dBV rms
+// highest bin above 2 within [k0, k1], refined by a parabola through the dB values of its neighbours
+function peakOf(P, k0, k1, df) {
+  let kb = -1, best = -Infinity;
+  for (let k = Math.max(2, k0); k <= Math.min(P.length - 2, k1); k++) if (P[k] > best) { best = P[k]; kb = k; }
+  if (kb < 0) return null;
+  const a = dBV(P[kb - 1]), b = dBV(P[kb]), c = dBV(P[kb + 1]), den = a - 2 * b + c, d = den ? 0.5 * (a - c) / den : 0;
+  return { f: (kb + d) * df, db: b - 0.25 * (a - c) * d };
+}
+function drawSpectrum(g, W, H) {
+  const L = 58, R = 16, T = 8, Bm = 26, pw = W - L - R, ph = H - T - Bm;
+  const ref = Number($('sref').value), per = Number($('sdiv').value), bottom = ref - 10 * per;
+  const dt = last ? last.dt : 1e-6, fs = 1 / dt, df = fs / NF, fny = fs / 2;
+  const fmax = Math.min(fny, Number($('fmax').value) || fny), logx = $('flog').value === 'log', fmin = logx ? Math.max(df, fmax / 1e5) : 0;
+  const xf = f => L + (logx ? Math.log(Math.max(f, fmin) / fmin) / Math.log(fmax / fmin) : f / fmax) * pw;
+  const fx = x => logx ? fmin * Math.pow(fmax / fmin, (x - L) / pw) : (x - L) / pw * fmax;
+  const yd = d => T + (ref - d) / (10 * per) * ph;
+  g.font = '11px ' + (css('--mono') || 'monospace'); g.lineWidth = 1;
+  for (let i = 0; i <= 10; i++) {                    // level grid
+    const y = T + i * ph / 10; g.strokeStyle = css('--grid'); g.beginPath(); g.moveTo(L, y + .5); g.lineTo(L + pw, y + .5); g.stroke();
+    g.fillStyle = css('--mut'); g.fillText(+(ref - i * per).toFixed(1) + ' dBV', 2, y + 4);
+  }
+  const ticks = [];                                  // frequency grid: decades (log) or tenths of the span (linear)
+  if (logx) { for (let d = Math.pow(10, Math.ceil(Math.log10(fmin))); d <= fmax * 1.0001; d *= 10) ticks.push(d); }
+  else for (let i = 0; i <= 10; i++) ticks.push(i * fmax / 10);
+  ticks.forEach((f, i) => {
+    const x = xf(f); g.strokeStyle = css('--grid'); g.beginPath(); g.moveTo(x + .5, T); g.lineTo(x + .5, T + ph); g.stroke();
+    if (logx || i % 2 === 0) { const t = f ? fmtHz(f) : '0 Hz', w = g.measureText(t).width; g.fillStyle = css('--mut'); g.fillText(t, Math.max(L, Math.min(x - w / 2, W - R - w)), H - 8); }
+  });
+  if (!last || !spec.n) return;
+  const shown = [$('vis1').value === '1', $('vis2').value === '1'], peaks = [null, null];
+  g.save(); g.beginPath(); g.rect(L, T, pw, ph); g.clip();
+  for (const c of [0, 1]) {
+    if (!shown[c]) continue;
+    const P = spec.p[c]; g.strokeStyle = css(c ? '--c2' : '--c1'); g.lineWidth = 1.3; g.beginPath(); let started = false;
+    for (let x = 0; x < pw; x++) {                   // peak detector: the highest bin under each pixel column
+      const k0 = Math.max(1, Math.floor(fx(L + x) / df)), k1 = Math.min(P.length - 1, Math.max(k0, Math.floor(fx(L + x + 1) / df)));
+      if (k0 > P.length - 1) break;
+      let m = 0; for (let k = k0; k <= k1; k++) if (P[k] > m) m = P[k];
+      const y = Math.min(T + ph + 2, yd(dBV(m)));
+      if (!started) { g.moveTo(L + x, y); started = true; } else g.lineTo(L + x, y);
+    }
+    g.stroke();
+    if ($('smark').value === '1') {
+      const pk = peakOf(P, Math.floor((logx ? fmin : 0) / df), Math.floor(fmax / df), df); peaks[c] = pk;
+      if (pk) { const x = xf(pk.f), y = yd(pk.db); g.fillStyle = css(c ? '--c2' : '--c1'); g.beginPath(); g.moveTo(x, y - 3); g.lineTo(x - 5, y - 12); g.lineTo(x + 5, y - 12); g.fill(); }
+    }
+  }
+  g.restore();
+  for (const [c, id] of [[0, 's1'], [1, 's2']]) {
+    if (!shown[c]) { $(id).textContent = 'hidden'; continue; }
+    const pk = peaks[c]; $(id).textContent = pk ? `peak ${fmtHz(pk.f)}  ${pk.db.toFixed(2)} dBV  (${(Math.SQRT2 * Math.pow(10, pk.db / 20)).toPrecision(4)} V peak)` : $('smark').value === '1' ? '–' : 'marker off';
+  }
+  const wv = windowOf($('swin').value), mode = $('strace').value;
+  $('sinfo').textContent = `Spectrum ${logx ? fmtHz(fmin) : '0 Hz'}–${fmtHz(fmax)}${logx ? ' (log)' : ''}, ${WINDOWS[$('swin').value].name}, bin ${fmtHz(df)}, RBW ${fmtHz(df * wv.enbw)}, `
+    + (mode === 'live' ? 'live' : mode === 'max' ? `max hold (${spec.n})` : `average ${spec.n}/${$('sN').value}`) + `, ${(1 / dt / 1e6).toPrecision(3)} MS/s`;
+  last.peaks = peaks;
+}
+function draw() {
+  const cv = $('cv'), dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
+  g.fillStyle = css('--plot'); g.fillRect(0, 0, W, H);
+  if ($('view').value === 'spec') { drawSpectrum(g, W, H); return; }
+  const L = 58, R = 58, T = 8, Bm = 26, pw = W - L - R, ph = H - T - Bm;
+  const N = last ? last.ch1.length : 8192, dt = last ? last.dt : 1e-6, t0 = last ? -last.pre * dt : 0;
+  // per channel: volts/div and display offset; screen = 10 divisions, centre line = 0 V before offset
+  const sc = [1, 2].map(c => ({ d: Number($('vdiv' + c).value) || 0.5, o: Number($('off' + c).value) || 0 }));
+  const yv = (v, c) => T + ph / 2 - (v + sc[c].o) / sc[c].d * ph / 10;
+  const shown = [$('vis1').value === '1', $('vis2').value === '1'];
+  const lbl = v => { const a = Math.abs(v) < 1e-9 ? 0 : v; return fmtV(a); };
+  g.font = '11px ui-monospace, monospace'; g.lineWidth = 1;
+  for (let i = -5; i <= 5; i++) {                    // horizontal grid: CH1 volts on the left, CH2 on the right
+    const y = T + ph / 2 - i * ph / 10; g.strokeStyle = css(i === 0 ? '--axis' : '--grid');
+    g.beginPath(); g.moveTo(L, y + .5); g.lineTo(L + pw, y + .5); g.stroke();
+    if (shown[0]) { g.fillStyle = css('--c1'); g.fillText(lbl(i * sc[0].d - sc[0].o), 4, y + 4); }
+    if (shown[1]) { const r = lbl(i * sc[1].d - sc[1].o); g.fillStyle = css('--c2'); g.fillText(r, W - 4 - g.measureText(r).width, y + 4); }
+  }
+  g.fillStyle = css('--mut');
+  for (let i = 0; i <= 10; i++) {                    // vertical grid: time
+    const x = L + i * pw / 10; g.strokeStyle = css('--grid');
+    g.beginPath(); g.moveTo(x + .5, T); g.lineTo(x + .5, T + ph); g.stroke();
+    if (i % 2 === 0) { const s = siTime(t0 + i * N * dt / 10); g.fillText(s, Math.min(x - g.measureText(s).width / 2, W - R - g.measureText(s).width), H - 8); }
+  }
+  if (!last) return;
+  for (const c of [0, 1]) {                          // 0 V marker per channel at the plot edge
+    const z = yv(0, c); if (!shown[c] || z < T || z > T + ph) continue;
+    g.fillStyle = css(c ? '--c2' : '--c1'); g.beginPath();
+    if (c) { g.moveTo(L + pw, z); g.lineTo(L + pw + 7, z - 5); g.lineTo(L + pw + 7, z + 5); }
+    else { g.moveTo(L, z); g.lineTo(L - 7, z - 5); g.lineTo(L - 7, z + 5); }
+    g.fill();
+  }
+  if (last.o.trig) {                                  // trigger level (on its channel's scale) and position
+    g.strokeStyle = css('--trig'); g.setLineDash([4, 4]);
+    const ty = yv(last.o.trig.level, last.o.trig.ch); g.beginPath(); g.moveTo(L, ty); g.lineTo(L + pw, ty); g.stroke();
+    const tx = L + last.pre / N * pw; g.beginPath(); g.moveTo(tx, T); g.lineTo(tx, T + ph); g.stroke(); g.setLineDash([]);
+  }
+  g.save(); g.beginPath(); g.rect(L, T, pw, ph); g.clip();
+  for (const [a, col, ci] of [[last.ch1, '--c1', 0], [last.ch2, '--c2', 1]]) {
+    if (!shown[ci]) continue;
+    const y = v => yv(v, ci);
+    g.strokeStyle = css(col); g.lineWidth = 1.5; g.beginPath();
+    const cols = Math.floor(pw), per = N / cols;
+    for (let c = 0; c < cols; c++) {                  // min/max per pixel column, so fast edges stay visible
+      const k0 = Math.floor(c * per), k1 = Math.max(k0 + 1, Math.floor((c + 1) * per));
+      let mn = Infinity, mx = -Infinity;
+      for (let k = k0; k < k1; k++) { if (a[k] < mn) mn = a[k]; if (a[k] > mx) mx = a[k]; }
+      // enter the column at the end nearest where the signal came from: a falling column is drawn top to bottom,
+      // a rising one bottom to top (always min first made falling slopes zig-zag and look thicker)
+      const falling = a[k0] > a[k1 - 1], p0 = falling ? mx : mn, p1 = falling ? mn : mx, x = L + c + .5;
+      if (c === 0) g.moveTo(x, y(p0)); else g.lineTo(x, y(p0));
+      if (p1 !== p0) g.lineTo(x, y(p1));
+    }
+    g.stroke();
+  }
+  g.restore();
+  for (const [a, id, c] of [[last.ch1, 's1', 0], [last.ch2, 's2', 1]]) {
+    if (!shown[c]) { $(id).textContent = 'hidden'; continue; }
+    const s = stats(a), top = 5 * sc[c].d - sc[c].o, bot = -5 * sc[c].d - sc[c].o, warn = [];
+    if (last.clip && last.clip[c]) warn.push('ADC clipped: use a larger scale');
+    else { if (s.mx > top) warn.push('off screen ↑'); if (s.mn < bot) warn.push('off screen ↓'); }
+    $(id).innerHTML = `mean ${s.mean.toFixed(3)} V   min ${s.mn.toFixed(3)}   max ${s.mx.toFixed(3)}   p-p ${(s.mx - s.mn).toFixed(3)} V`
+      + (warn.length ? `   <span class="bad">${warn.join(', ')}</span>` : '');
+  }
+  $('sinfo').textContent = `CH1 ${fmtVdiv(sc[0].d)}, CH2 ${fmtVdiv(sc[1].d)}, ${(1 / dt / 1e6).toPrecision(3)} MS/s, ${siTime(N * dt)} span, ${last.o.trig ? (last.triggered ? 'triggered' : 'auto') : 'untriggered'}${last.avgInfo ? ', ' + last.avgInfo : ''}, ${last.ms.toFixed(0)} ms per capture`;
+}
+// ---------- AWG, supplies, monitor ----------
+$('awgon').onclick = () => guard(async () => {
+  const r = await ad.fgen($('shape').value, Number($('freq').value), [Number($('a1').value), Number($('a2').value)], Number($('ph').value), awgOpt());
+  const s = `${$('shape').value} ${r.f.toFixed(3)} Hz, W1 ${$('a1').value} V${r.large[0] ? ' (5 V range)' : ''}, W2 ${$('a2').value} V${r.large[1] ? ' (5 V range)' : ''}`;
+  $('awgst').textContent = s; log('AWG ' + s);
+});
+$('awgoff').onclick = () => guard(async () => { await ad.awgStop(); $('awgst').textContent = 'stopped (0 V)'; log('AWG stopped'); });
+async function monitors() {
+  const u = await ad.adm(0x5a), a = await ad.adm(0x58), t = await ad.temperature();
+  $('musb').textContent = u ? `${u.v.toFixed(3)} V, ${(u.mv / 0.1).toFixed(0)} mA` : 'no answer';
+  $('maux').textContent = a ? `${a.v.toFixed(3)} V, sense ${a.mv.toFixed(2)} mV` : 'not powered';
+  $('mtmp').textContent = t == null ? 'no answer' : `${t.toFixed(2)} °C, ${ad.powerMode()} power`;
+  $('pmode').value = ad.powerMode() === 'external' ? 'ext' : 'usb';
+  log(`monitor: USB ${$('musb').textContent} | AUX ${$('maux').textContent} | ${$('mtmp').textContent}`);
+}
+$('mon').onclick = () => guard(monitors);
+$('supply').onclick = () => guard(async () => {
+  const vp = $('vpon').checked ? Number($('vp').value) : 0, vm = $('vmon').checked ? Number($('vm').value) : 0;
+  await ad.supplies(vp, vm);
+  $('supst').textContent = vp || vm ? `V+ ${vp ? vp.toFixed(2) + ' V' : 'off'}, V− ${vm ? '−' + vm.toFixed(2) + ' V' : 'off'}` : 'off';
+  log('supplies: ' + $('supst').textContent); await monitors();
+});
+$('suppoff').onclick = () => guard(async () => { await ad.supplies(0, 0); $('vpon').checked = $('vmon').checked = false; $('supst').textContent = 'off'; log('supplies off'); await monitors(); });
+$('pmode').onchange = () => guard(async () => {
+  try { await ad.setPowerMode($('pmode').value === 'ext'); } finally { $('pmode').value = ad.powerMode() === 'external' ? 'ext' : 'usb'; }
+  log('power mode: ' + ad.powerMode()); await monitors();
+});
+// ---------- logic analyser ----------
+for (let i = 0; i < 16; i++) $('ledge').add(new Option('DIO' + i, i));
+const hx = id => parseInt($(id).value, 16) & 0xffff;
+function laOpts() {
+  const on = $('ltrig').value === 'on';
+  return { rate: Number($('lrate').value), trig: on ? { mask: hx('lmask'), val: hx('lval'), ch: Number($('ledge').value), falling: $('lpol').value === 'f', pre: 8192, autoMs: 300 } : null };
+}
+async function lashot() {
+  needReady('the logic analyser');
+  const t0 = performance.now(), o = laOpts();
+  let r; try { r = await ad.la(o); } catch (e) { log('LA capture failed (' + e.message + '), retrying once'); r = await ad.la(o); }
+  lalast = { ...r, o, ms: performance.now() - t0 }; ladraw();
+  if (!laRunning || performance.now() - (lashot.logged || 0) > 2000) {
+    lashot.logged = performance.now();
+    const edges = []; for (let c = 0; c < 16; c++) { let n = 0; for (let k = 1; k < r.s.length; k++) n += (r.s[k] ^ r.s[k - 1]) >> c & 1; edges.push(n); }
+    let steps = 0; for (let k = 1; k < r.s.length; k++) if (((r.s[k] - r.s[k - 1]) & 0xff) === 1) steps++;   // low byte counting up by one
+    log(`LA ${(1 / r.dt / 1e6).toPrecision(3)} MS/s ${o.trig ? (r.triggered ? 'triggered' : 'auto') : 'untriggered'} trig@${r.tl} ${lalast.ms.toFixed(0)} ms | first ${Array.from(r.s.slice(0, 6), v => v.toString(16).padStart(4, '0')).join(' ')} | edges ${edges.join(',')} | low-byte +1 steps ${steps}` + (o.trig ? ` | at trigger [${r.tl - 3}..${r.tl + 3}] ${Array.from(r.s.slice(Math.max(0, r.tl - 3), r.tl + 4), v => v.toString(16).padStart(4, '0')).join(' ')}` : ''));
+  }
+}
+$('lsingle').onclick = () => guard(lashot);
+$('lrun').onclick = async () => {
+  if (laRunning) { laRunning = false; $('lrun').textContent = 'Run'; return; }
+  laRunning = true; $('lrun').textContent = 'Stop'; setBusy(true); $('lrun').disabled = false;
+  try { while (laRunning) await lashot(); }
+  catch (e) { log('error: ' + e.message); $('state').innerHTML = `<span class="bad">${e.message}</span>`; }
+  laRunning = false; $('lrun').textContent = 'Run'; setBusy(false);
+};
+for (const id of ['lch', 'lzoom']) $(id).addEventListener('change', () => lalast && ladraw());
+function ladraw() {
+  const cv = $('lcv'), dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
+  g.fillStyle = css('--plot'); g.fillRect(0, 0, W, H);
+  const nch = Number($('lch').value), L = 52, R = 10, T = 6, Bm = 24, pw = W - L - R, rh = (H - T - Bm) / nch;
+  g.font = '11px ui-monospace, monospace';
+  if (!lalast) { for (let c = 0; c < nch; c++) { g.fillStyle = css('--mut'); g.fillText('DIO' + c, 4, T + rh * (c + .6)); } return; }
+  const S = lalast.s, N = S.length, z = Number($('lzoom').value), span = Math.max(16, Math.floor(N / z));
+  const centre = lalast.o.trig ? lalast.tl : N / 2, a = Math.max(0, Math.min(N - span, Math.round(centre - span / 2))), dt = lalast.dt;
+  for (let c = 0; c < nch; c++) {
+    const y0 = T + rh * c, hi = y0 + rh * 0.2, lo = y0 + rh * 0.8;
+    g.fillStyle = css('--mut'); g.fillText('DIO' + c, 4, y0 + rh * 0.6);
+    g.strokeStyle = css('--grid'); g.beginPath(); g.moveTo(L, y0 + rh + .5); g.lineTo(L + pw, y0 + rh + .5); g.stroke();
+    g.strokeStyle = css(c % 2 ? '--c2' : '--c1'); g.lineWidth = 1.3; g.beginPath();
+    const cols = Math.floor(pw);
+    for (let x = 0; x < cols; x++) {                  // per pixel column: both levels seen -> vertical bar
+      const k0 = a + Math.floor(x * span / cols), k1 = Math.max(k0 + 1, a + Math.floor((x + 1) * span / cols));
+      let s0 = false, s1 = false; for (let k = k0; k < k1 && k < N; k++) { if (S[k] >> c & 1) s1 = true; else s0 = true; }
+      const X = L + x + .5;
+      if (s0 && s1) { g.moveTo(X, hi); g.lineTo(X, lo); }
+      else { const y = s1 ? hi : lo; if (x === 0) g.moveTo(X, y); g.lineTo(X + 1, y); g.moveTo(X + 1, y); }
+    }
+    g.stroke();
+  }
+  if (lalast.o.trig && lalast.tl >= a && lalast.tl < a + span) {
+    const tx = L + (lalast.tl - a) / span * pw; g.strokeStyle = css('--trig'); g.setLineDash([4, 4]);
+    g.beginPath(); g.moveTo(tx, T); g.lineTo(tx, H - Bm); g.stroke(); g.setLineDash([]);
+  }
+  g.fillStyle = css('--mut');
+  for (let i = 0; i <= 4; i++) { const k = a + i * span / 4, s = siTime((k - (lalast.o.trig ? lalast.tl : 0)) * dt), x = L + i * pw / 4;
+    g.fillText(s, Math.max(L, Math.min(x - g.measureText(s).width / 2, W - R - g.measureText(s).width)), H - 7); }
+  $('linfo').textContent = `${(1 / dt / 1e6).toPrecision(3)} MS/s, 16384 samples = ${siTime(N * dt)}, showing ${siTime(span * dt)}, ${lalast.o.trig ? (lalast.triggered ? 'triggered' : 'auto (no trigger)') : 'untriggered'}, ${lalast.ms.toFixed(0)} ms`;
+}
+// ---------- digital outputs ----------
+$('pgon').onclick = () => guard(async () => {
+  const mask = hx('pgmask'), words = Array.from({ length: 2048 }, (_, k) => k & 0xffff);
+  const r = await ad.pgLoad(words, Number($('pgrate').value), mask);
+  $('pgst').textContent = `counter at ${r.toPrecision(4)} words/s on ${mask.toString(16).padStart(4, '0')}`; log('pattern: ' + $('pgst').textContent);
+});
+// one-click check: counter on DIO0-7 at 1 MHz, captures at 10 MS/s untriggered / pattern 80 / pattern 80 + DIO7 rising
+$('latest').onclick = () => guard(async () => {
+  needReady('the LA self-test');
+  log('LA self-test: counter 00..ff on DIO0-7 at 1 MHz, sampled at 10 MS/s');
+  await ad.pgLoad(Array.from({ length: 2048 }, (_, k) => k), 1e6, 0xff);
+  const hx4 = v => v.toString(16).padStart(4, '0');
+  const cases = [['untriggered', null], ['pattern 80', { mask: 0xff, val: 0x80, ch: -1, falling: false, pre: 8192, autoMs: 300 }],
+                 ['pattern 80 + DIO7 rising', { mask: 0xff, val: 0x80, ch: 7, falling: false, pre: 8192, autoMs: 300 }]];
+  try {
+    for (const [name, trig] of cases) {
+      let r; try { r = await ad.la({ rate: 10e6, trig }); } catch (e) { log('  retry after ' + e.message); r = await ad.la({ rate: 10e6, trig }); }
+      let steps = 0; for (let k = 1; k < r.s.length; k++) if (((r.s[k] - r.s[k - 1]) & 0xff) === 1) steps++;
+      const at = trig ? ` | ${r.triggered ? 'triggered' : 'NOT triggered'} at ${r.tl}: ${Array.from(r.s.slice(r.tl - 3, r.tl + 4), v => hx4(v & 0xff)).join(' ')} (low byte, marker = 4th)` : '';
+      log(`  ${name}: low-byte +1 steps ${steps}${at}`);
+      lalast = { ...r, o: { trig }, ms: 0 };
+    }
+  } finally { await ad.pgStop(); log('LA self-test done, pins released'); }
+  ladraw();
+});
+$('pgoff').onclick = () => guard(async () => { await ad.pgStop(); $('pgst').textContent = 'stopped, pins released'; log('pattern stopped'); });
+$('dset').onclick = () => guard(async () => { const p = await ad.dio(hx('dout'), hx('doe')); $('dpins').textContent = 'pins ' + p.toString(16).padStart(4, '0'); log(`DIO out ${$('dout').value} oe ${$('doe').value} -> ${$('dpins').textContent}`); });
+$('dread').onclick = () => guard(async () => { const p = await ad.dioRead(); $('dpins').textContent = 'pins ' + p.toString(16).padStart(4, '0'); log('DIO ' + $('dpins').textContent); });
+addEventListener('resize', () => { draw(); ladraw(); });
+for (const id of ['swin', 'strace', 'sN']) $(id).addEventListener('change', () => { specReset(); if (last && last.raw1) specUpdate(last.raw1, last.raw2, last.dt); });
+// ---------- tile control panel ----------
+const fmtHz = f => f >= 1e6 ? (f / 1e6).toPrecision(4) + ' MHz' : f >= 1e3 ? (f / 1e3).toPrecision(4) + ' kHz' : f.toPrecision(4) + ' Hz';
+const selText = id => $(id).options[$(id).selectedIndex].text;
+const fire = id => $(id).dispatchEvent(new Event('change', { bubbles: true }));
+const cycle = id => { const e = $(id); e.selectedIndex = (e.selectedIndex + 1) % e.options.length; fire(id); };
+const later = (fn, ms) => { let t; return () => { clearTimeout(t); t = setTimeout(fn, ms); }; };
+const awgOpt = () => ({ lobes: Number($('slobes').value), order: Number($('sorder').value) });
+const awgIsOn = () => { const t = $('awgst').textContent; return t !== '' && !t.startsWith('stopped'); };
+const supOn = k => (k ? /V− −\d/ : /V\+ \d/).test($('supst').textContent);
+async function act(name, fn) {
+  if (!ad) { log(name + ': not connected'); return; }
+  try { await fn(); } catch (e) { log(`${name}: ${e.message}`); }
+  renderTiles();
+}
+const awgApply = () => act('AWG', async () => {
+  needReady('the AWG');
+  const r = await ad.fgen($('shape').value, Number($('freq').value), [Number($('a1').value), Number($('a2').value)], Number($('ph').value), awgOpt());
+  $('awgst').textContent = `${$('shape').value} ${r.f.toFixed(3)} Hz, W1 ${$('a1').value} V${r.large[0] ? ' (5 V range)' : ''}, W2 ${$('a2').value} V${r.large[1] ? ' (5 V range)' : ''}`;
+  log('AWG ' + $('awgst').textContent);
+});
+const awgOff = () => act('AWG', async () => {
+  needReady('the AWG'); await ad.awgStop(); $('awgst').textContent = 'stopped (0 V)'; log('AWG stopped'); });
+const supApply = () => act('Supplies', async () => {
+  needReady('the supplies');
+  const vp = $('vpon').checked ? Number($('vp').value) : 0, vm = $('vmon').checked ? Number($('vm').value) : 0;
+  await ad.supplies(vp, vm);
+  $('supst').textContent = vp || vm ? `V+ ${vp ? vp.toFixed(2) + ' V' : 'off'}, V− ${vm ? '−' + vm.toFixed(2) + ' V' : 'off'}` : 'off';
+  log('supplies: ' + $('supst').textContent); await monitors();
+});
+const liveAwg = later(() => awgIsOn() && awgApply(), 150);
+const liveSup = later(() => (supOn(0) || supOn(1)) && supApply(), 200);
+const ppOf = a => { const s = stats(a); return (s.mx - s.mn).toFixed(2); };
+// kinds: var (slider: lin | log | list over a select), bits (16-bit mask editor), cycle (click = next option),
+// toggle (on/off state), act (one-shot action), info (shows a reading; click refreshes)
+// volts/div: 1-2-5 steps for −/+, any value from the slider or typed entry; the hardware gain follows (±2.7 V up to 0.5 V/div)
+const SEQ125 = [1e-3, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2, 0.1, 0.2, 0.5, 1, 2, 5];
+const fmtV = v => Math.abs(v) < 1 && v !== 0 ? +(v * 1e3).toPrecision(3) + ' mV' : +v.toPrecision(3) + ' V';
+const fmtVdiv = v => fmtV(v) + '/div';
+function syncRange() {
+  for (const c of [1, 2]) {
+    const want = Number($('vdiv' + c).value) <= 0.5 ? '1' : '0';
+    if ($('r' + c).value !== want) { $('r' + c).value = want; log(`CH${c}: ${want === '1' ? '±2.7 V' : '±25 V'} hardware range`); }
+  }
+}
+for (const id of ['vdiv1', 'vdiv2']) $(id).addEventListener('change', syncRange);
+const hex4 = id => (parseInt($(id).value, 16) & 0xffff).toString(16).padStart(4, '0');
+const press = id => ad ? $(id).onclick() : log('not connected');
+const patOn = () => $('pgst').textContent.startsWith('counter');
+const TILES = [
+  { g: 'Run' },
+  { id: 't-run', label: 'Run / Stop', kind: 'toggle', val: () => running ? 'running' : 'stopped', on: () => running, click: () => press('run') },
+  { id: 't-single', label: 'Single · p-p V', kind: 'act', val: () => last ? `${ppOf(last.ch1)} | ${ppOf(last.ch2)}` : '–', click: () => act('Single', shot) },
+  { id: 't-avg', label: 'Average', kind: 'toggle', on: () => $('avgon').value === '1',
+    val: () => $('avgon').value !== '1' ? 'off' : $('tsrc').value === 'off' ? 'on · needs trigger' : `${avg.n}/${$('avgN').value}`,
+    click: () => { $('avgon').value = $('avgon').value === '1' ? '0' : '1'; fire('avgon'); avgReset(); log('averaging ' + ($('avgon').value === '1' ? 'on, ' + $('avgN').value + ' captures' : 'off')); } },
+  { id: 't-avgN', label: 'Average count', kind: 'var', input: 'avgN', scale: 'list' },
+  { id: 't-avgreset', label: 'Restart average', kind: 'act', val: () => avg.n ? `${avg.n} so far` : '–', click: () => { avgReset(); log('average restarted'); } },
+  { id: 't-avgtest', label: 'Averaging self-test', kind: 'act', val: () => 'W2 → CH2', click: () => act('Averaging self-test', avgSelfTest) },
+  { g: 'Horizontal' },
+  { id: 't-rate', label: 'Sample rate', kind: 'var', input: 'rate', scale: 'list' },
+  { g: 'Trigger' },
+  { id: 't-tsrc', label: 'Source', kind: 'cycle', input: 'tsrc' },
+  { id: 't-tlev', unit: 'V', label: 'Level', kind: 'var', input: 'tlev', scale: 'lin', step: 0.01,
+    range: () => { const c = $('tsrc').value === '1' ? 'r2' : 'r1'; return $(c).value === '1' ? [-2.5, 2.5] : [-25, 25]; }, fmt: v => v.toFixed(2) + ' V' },
+  { id: 't-tedge', label: 'Edge', kind: 'cycle', input: 'tedge' },
+  { g: 'CH1', col: '--c1' },
+  { id: 't-vis1', label: 'CH1', kind: 'toggle', val: () => $('vis1').value === '1' ? 'shown' : 'hidden', on: () => $('vis1').value === '1',
+    click: () => { $('vis1').value = $('vis1').value === '1' ? '0' : '1'; fire('vis1'); } },
+  { id: 't-rng1', label: 'Input range', kind: 'info', val: () => selText('r1') + (last && last.clip && last.clip[0] ? ' · clipped' : ''), click: () => {} },
+  { id: 't-vdiv1', unit: 'V/div', label: 'Scale', kind: 'var', input: 'vdiv1', scale: 'log', min: 1e-3, max: 5, steps: SEQ125, fmt: fmtVdiv },
+  { id: 't-off1', unit: 'V', label: 'Offset', kind: 'var', input: 'off1', scale: 'lin', step: () => Number($('vdiv1').value) / 5,
+    range: () => $('r1').value === '1' ? [-2.5, 2.5] : [-25, 25], fmt: fmtV },
+  { g: 'CH2', col: '--c2' },
+  { id: 't-vis2', label: 'CH2', kind: 'toggle', val: () => $('vis2').value === '1' ? 'shown' : 'hidden', on: () => $('vis2').value === '1',
+    click: () => { $('vis2').value = $('vis2').value === '1' ? '0' : '1'; fire('vis2'); } },
+  { id: 't-rng2', label: 'Input range', kind: 'info', val: () => selText('r2') + (last && last.clip && last.clip[1] ? ' · clipped' : ''), click: () => {} },
+  { id: 't-vdiv2', unit: 'V/div', label: 'Scale', kind: 'var', input: 'vdiv2', scale: 'log', min: 1e-3, max: 5, steps: SEQ125, fmt: fmtVdiv },
+  { id: 't-off2', unit: 'V', label: 'Offset', kind: 'var', input: 'off2', scale: 'lin', step: () => Number($('vdiv2').value) / 5,
+    range: () => $('r2').value === '1' ? [-2.5, 2.5] : [-25, 25], fmt: fmtV },
+  { g: 'Spectrum' },
+  { id: 't-view', label: 'View', kind: 'cycle', input: 'view' },
+  { id: 't-swin', label: 'Window', kind: 'cycle', input: 'swin' },
+  { id: 't-strace', label: 'Trace', kind: 'cycle', input: 'strace', val: () => selText('strace') + ($('strace').value === 'live' ? '' : ` · ${spec.n}`) },
+  { id: 't-sN', label: 'Spectrum avg', kind: 'var', input: 'sN', scale: 'list' },
+  { id: 't-sref', unit: 'dBV', label: 'Ref level', kind: 'var', input: 'sref', scale: 'lin', min: -100, max: 30, step: 1, fmt: v => v.toFixed(0) + ' dBV' },
+  { id: 't-sdiv', label: 'dB / div', kind: 'var', input: 'sdiv', scale: 'list' },
+  { id: 't-fmax', unit: 'Hz', label: 'Span (top)', kind: 'var', input: 'fmax', scale: 'log', min: 10, max: 5e7, fmt: v => fmtHz(Math.min(v, last ? 0.5 / last.dt : v)) },
+  { id: 't-flog', label: 'Freq axis', kind: 'cycle', input: 'flog' },
+  { id: 't-smark', label: 'Peak marker', kind: 'cycle', input: 'smark', val: () => $('smark').value === '1' ? (last && last.peaks && (last.peaks[1] || last.peaks[0]) ? fmtHz((last.peaks[1] || last.peaks[0]).f) : 'on') : 'off' },
+  { id: 't-sreset', label: 'Restart trace', kind: 'act', val: () => spec.n ? `${spec.n} so far` : '–', click: () => { specReset(); log('spectrum trace restarted'); } },
+  { g: 'Waveform generator' },
+  { id: 't-awg', label: 'AWG', kind: 'toggle', val: () => awgIsOn() ? 'on' : 'off', on: awgIsOn, click: () => awgIsOn() ? awgOff() : awgApply() },
+  { id: 't-shape', label: 'Shape', kind: 'cycle', input: 'shape', live: liveAwg },
+  { id: 't-slobes', label: 'Sinc lobes', kind: 'var', input: 'slobes', scale: 'lin', min: 1, max: 100, step: 1, live: liveAwg,
+    fmt: v => $('shape').value === 'sinc' ? v.toFixed(0) : v.toFixed(0) + ' (sinc)' },
+  { id: 't-sorder', label: 'PRBS order', kind: 'var', input: 'sorder', scale: 'lin', min: 3, max: 12, step: 1, live: liveAwg,
+    fmt: v => `${v.toFixed(0)} · ${(1 << v) - 1} chips` + ($('shape').value === 'prbs' ? '' : ' (prbs)') },
+  { id: 't-freq', unit: 'Hz', label: 'Frequency', kind: 'var', input: 'freq', scale: 'log', min: 1, max: 1e7, fmt: fmtHz, live: liveAwg },
+  { id: 't-ph', unit: '°', label: 'W2 phase', kind: 'var', input: 'ph', scale: 'lin', min: -180, max: 180, step: 1, fmt: v => v.toFixed(0) + '°', live: liveAwg },
+  { id: 't-a1', unit: 'V', label: 'W1 amplitude', kind: 'var', input: 'a1', scale: 'lin', min: 0, max: 5, step: 0.01, fmt: v => v.toFixed(2) + ' V', live: liveAwg },
+  { id: 't-a2', unit: 'V', label: 'W2 amplitude', kind: 'var', input: 'a2', scale: 'lin', min: 0, max: 5, step: 0.01, fmt: v => v.toFixed(2) + ' V', live: liveAwg },
+  { g: 'Supplies' },
+  { id: 't-vpon', label: 'V+', kind: 'toggle', val: () => supOn(0) ? 'on' : 'off', on: () => supOn(0), click: () => { $('vpon').checked = !supOn(0); supApply(); } },
+  { id: 't-vp', unit: 'V', label: 'V+ set', kind: 'var', input: 'vp', scale: 'lin', min: 0.5, max: 5, step: 0.01, fmt: v => v.toFixed(2) + ' V', live: liveSup },
+  { id: 't-vmon', label: 'V−', kind: 'toggle', val: () => supOn(1) ? 'on' : 'off', on: () => supOn(1), click: () => { $('vmon').checked = !supOn(1); supApply(); } },
+  { id: 't-vm', unit: 'V', label: 'V− set', kind: 'var', input: 'vm', scale: 'lin', min: 0.5, max: 5, step: 0.01, fmt: v => '−' + v.toFixed(2) + ' V', live: liveSup },
+  { id: 't-pmode', label: 'Power source', kind: 'cycle', input: 'pmode', val: () => ad ? ad.powerMode() : selText('pmode') },
+  { g: 'Monitor' },
+  { id: 't-usb', label: 'USB input', kind: 'info', val: () => $('musb').textContent, click: () => act('Monitor', monitors) },
+  { id: 't-aux', label: 'AUX input', kind: 'info', val: () => $('maux').textContent, click: () => act('Monitor', monitors) },
+  { id: 't-tmp', label: 'Board', kind: 'info', val: () => $('mtmp').textContent.split(',')[0], click: () => act('Monitor', monitors) },
+  { g: 'Logic analyser' },
+  { id: 't-lrun', label: 'LA', kind: 'toggle', val: () => laRunning ? 'running' : 'stopped', on: () => laRunning, click: () => press('lrun') },
+  { id: 't-lsingle', label: 'LA single', kind: 'act', val: () => lalast ? (lalast.o.trig ? (lalast.triggered ? 'triggered' : 'auto') : 'captured') : '–', click: () => act('LA', lashot) },
+  { id: 't-lrate', label: 'LA rate', kind: 'var', input: 'lrate', scale: 'list' },
+  { id: 't-lch', label: 'Channels', kind: 'cycle', input: 'lch' },
+  { id: 't-ltrig', label: 'LA trigger', kind: 'cycle', input: 'ltrig' },
+  { id: 't-lmask', label: 'Trigger mask', kind: 'bits16', input: 'lmask' },
+  { id: 't-lval', label: 'Trigger value', kind: 'bits16', input: 'lval' },
+  { id: 't-ledge', label: 'Edge on', kind: 'var', input: 'ledge', scale: 'list' },
+  { id: 't-lpol', label: 'Edge polarity', kind: 'cycle', input: 'lpol' },
+  { id: 't-lzoom', label: 'LA zoom', kind: 'var', input: 'lzoom', scale: 'list' },
+  { g: 'Digital outputs' },
+  { id: 't-pg', label: 'Counter pattern', kind: 'toggle', val: () => patOn() ? 'playing' : 'off', on: patOn, click: () => press(patOn() ? 'pgoff' : 'pgon') },
+  { id: 't-pgmask', label: 'Pattern pins', kind: 'bits16', input: 'pgmask' },
+  { id: 't-pgrate', unit: 'w/s', label: 'Pattern rate', kind: 'var', input: 'pgrate', scale: 'log', min: 10, max: 1e8, fmt: v => fmtHz(v).replace('Hz', 'w/s') },
+  { id: 't-dout', label: 'Static out', kind: 'bits16', input: 'dout' },
+  { id: 't-doe', label: 'Static enable', kind: 'bits16', input: 'doe' },
+  { id: 't-dset', label: 'Apply static', kind: 'act', val: () => 'out ' + hex4('dout') + ' / oe ' + hex4('doe'), click: () => press('dset') },
+  { id: 't-dread', label: 'Pins', kind: 'info', val: () => $('dpins').textContent.replace('pins ', '') || '–', click: () => press('dread') },
+  { id: 't-latest', label: 'LA self-test', kind: 'act', val: () => 'DIO 0–7', click: () => press('latest') },
+];
+const KIND_HINT = { var: 'Click to select, then use the slider, −/+ or type a value.', bits16: 'Click to select, then flip bits in the grid or type hex.',
+  cycle: 'Click to step to the next option.', toggle: 'Click to switch on or off.', act: 'Click to run.', info: 'Click to refresh.' };
+const HELP = {
+  't-run': 'Capture continuously (about 12 captures/s at 1 MS/s). Stops when clicked again.',
+  't-single': 'Take one scope capture. Shows peak-to-peak volts of CH1 | CH2.',
+  't-rate': 'Scope sample rate, 10 kS/s to 100 MS/s. The 8192-sample window spans 82 µs to 0.82 s.',
+  't-tsrc': 'Scope trigger source: off (free running), CH1 or CH2. With no trigger within 200 ms it captures anyway (auto).',
+  't-tlev': 'Trigger level in volts, within the source channel’s range. Shown as a dashed line on the scope.',
+  't-tedge': 'Trigger on the rising or falling crossing of the level.',
+  't-avgN': 'How many triggered captures the average uses, 2 to 256. Kept while averaging is off.',
+  't-avg': 'Averaging on or off. When on, averages N triggered captures point by point (noise drops about √N). Each capture is shifted by its interpolated trigger crossing, so edges stay sharp. Needs a trigger; untriggered (auto) captures are skipped. After N captures it keeps tracking (exponential, weight 1/N). Changing rate, range or trigger restarts it.',
+  't-avgreset': 'Discard the average and start again from the next capture.',
+  't-avgtest': 'Self-test: plays a 1 kHz 1 V sine on W1/W2 (W2 must be wired to CH2), takes 20 triggered captures with Average 16, and logs the noise of a single capture vs the average around a fitted sine. Your settings and AWG state are restored afterwards.',
+  't-view': 'Show the captures as a scope trace or as a spectrum (8192-point FFT of each capture, computed in the page). Run, Single, rate, trigger and the channel controls work in both views.',
+  't-swin': 'FFT window. Blackman-Harris: low leakage, good default. Hann: narrower peaks. Flat-top: accurate amplitudes of tones between bins. Rectangular: none (for signals exactly periodic in the record).',
+  't-strace': 'Live: each capture. Average: power average of N captures (smooths the noise floor). Max hold: highest level seen per bin.',
+  't-sN': 'How many captures the spectrum average uses, 2 to 128.',
+  't-sref': 'Level at the top of the screen, in dBV (0 dBV = 1 V rms). A 1 V-peak sine reads −3.0 dBV.',
+  't-sdiv': 'dB per division (10 divisions).',
+  't-fmax': 'Highest frequency shown. Limited to half the sample rate: raise the scope sample rate for wider spans, lower it for finer bins (bin = rate / 8192).',
+  't-flog': 'Linear or logarithmic frequency axis (log starts about five decades below the top).',
+  't-smark': 'Peak marker on the highest bin of each shown channel, interpolated between bins; the readout gives its frequency and level.',
+  't-sreset': 'Clear the averaged or max-hold trace and start again.',
+  't-slobes': 'Sinc shape: zero crossings on each side of the central peak (1 to 100). A repeating sinc has a flat comb spectrum: equal lines at multiples of the frequency up to about lobes × frequency, then a sharp cut-off; handy for a one-shot frequency response.',
+  't-sorder': 'Spread spectrum shape: length n of the maximal-length LFSR, giving 2^n − 1 pseudo-random ±1 chips per cycle (7 to 4095). Chip rate = frequency × (2^n − 1); the spectrum is lines at the frequency spacing under a sinc² envelope with its first null at the chip rate. Keep the chip rate below about 10 MHz for clean chips.',
+  't-vis1': 'Show or hide the CH1 trace and its axis labels. Display only: CH1 is still captured and can still trigger.',
+  't-vis2': 'Show or hide the CH2 trace and its axis labels. Display only: CH2 is still captured and can still trigger.',
+  't-rng1': 'CH1 hardware input range, picked automatically from the scale: ±2.7 V up to 0.5 V/div, ±25 V above. Shows “clipped” when the input hit the ADC limits.',
+  't-rng2': 'CH2 hardware input range, picked automatically from the scale: ±2.7 V up to 0.5 V/div, ±25 V above. Shows “clipped” when the input hit the ADC limits.',
+  't-vdiv1': 'CH1 volts per division (10 divisions high). −/+ step 1-2-5 from 1 mV to 5 V/div; the slider and typing give any value. Up to 0.5 V/div uses the ±2.7 V hardware range (0.33 mV steps), above it ±25 V (3.6 mV steps).',
+  't-off1': 'Moves the CH1 trace up (+) or down (−) by this many volts; display only. −/+ move 1/5 division; type for exact values.',
+  't-vdiv2': 'CH2 volts per division (10 divisions high). −/+ step 1-2-5 from 1 mV to 5 V/div; the slider and typing give any value. Up to 0.5 V/div uses the ±2.7 V hardware range (0.33 mV steps), above it ±25 V (3.6 mV steps).',
+  't-off2': 'Moves the CH2 trace up (+) or down (−) by this many volts; display only. −/+ move 1/5 division; type for exact values.',
+  't-awg': 'Waveform generator on W1/W2. While on, changes to shape, frequency, amplitude or phase apply live.',
+  't-shape': 'Waveform shape: sine, square, triangle or saw (both outputs); sinc and spread (PRBS) use the Sinc lobes / PRBS order tiles.',
+  't-freq': 'Output frequency, 1 Hz to 10 MHz, 0.023 Hz resolution. Above a few MHz the 8192-point table is coarsely sampled.',
+  't-ph': 'Phase of W2 relative to W1, −180° to +180°.',
+  't-a1': 'W1 peak amplitude, 0 to 5 V. Above 1.25 V the output switches to its ±5 V range automatically.',
+  't-a2': 'W2 peak amplitude, 0 to 5 V. Above 1.25 V the output switches to its ±5 V range automatically.',
+  't-vpon': 'Positive user supply on or off. Mind the load: in USB power mode the supplies trip at about 1 W total.',
+  't-vp': 'V+ voltage, 0.5 to 5 V. Applies live while V+ is on.',
+  't-vmon': 'Negative user supply on or off.',
+  't-vm': 'V− magnitude, 0.5 to 5 V (output is negative). Applies live while V− is on.',
+  't-pmode': 'Power source for the supplies: USB (limit about 1 W) or external AUX 5 V (tested to 1.9 W). External needs the AUX input powered.',
+  't-usb': 'USB input voltage and current from the board’s power monitor.',
+  't-aux': 'AUX (external 5 V) input voltage and sense-resistor voltage, if powered.',
+  't-tmp': 'Board temperature from the on-board sensor.',
+  't-lrun': 'Logic analyser, continuous captures of all 16 DIO pins.',
+  't-lsingle': 'Take one logic-analyser capture (16384 samples).',
+  't-lrate': 'LA sample rate, 10 kS/s to 100 MS/s.',
+  't-lch': 'How many DIO rows to draw: 0–7 or 0–15.',
+  't-ltrig': 'LA trigger: off, or on the pattern below (mask/value) and optional edge. The trigger point is centred in the capture.',
+  't-lmask': 'Which DIO pins the trigger pattern compares. 0000 = ignore all pins.',
+  't-lval': 'Required level of each masked pin for the trigger.',
+  't-ledge': 'Optional edge on one pin in addition to the pattern. An edge avoids false triggers on transition glitches of a counting bus.',
+  't-lpol': 'Rising or falling for the edge pin.',
+  't-lzoom': 'Zoom the LA view around the trigger (or centre): 1× to 512×.',
+  't-pg': 'Play a counting pattern (0, 1, 2 …) on the selected pins, looping. Drives the pins at 3.3 V: only use on pins that are free.',
+  't-pgmask': 'Which DIO pins the pattern drives; the others stay inputs.',
+  't-pgrate': 'Pattern words per second, up to 100 M (100 MHz / n).',
+  't-dout': 'Static output level per pin (applied with Apply static).',
+  't-doe': 'Which pins are driven by the static outputs; 0 = input.',
+  't-dset': 'Apply the static out / enable masks to the DIO pins and read them back.',
+  't-dread': 'Read the current level of all 16 DIO pins (hex).',
+  't-latest': 'Self-test: plays a counter on DIO0–7 (drives them!), captures it untriggered and triggered, logs the result, then releases the pins.',
+};
+let selTile = null;
+const tileVal = t => t.val ? t.val() : t.kind === 'bits16' ? hex4(t.input) : t.kind === 'var' && t.scale !== 'list' ? (t.fmt || String)(Number($(t.input).value)) : selText(t.input);
+function sliderSetup() {
+  const sl = $('slider'), t = selTile;
+  $('bits').hidden = !(t && t.kind === 'bits16'); $('srow').hidden = !!(t && t.kind === 'bits16');
+  const ed = $('sedit'); ed.disabled = !t; $('sunit').textContent = t ? (t.kind === 'bits16' ? 'hex' : t.unit || '') : '';
+  if (document.activeElement !== ed) ed.value = t ? editText(t) : '';
+  if (!t) { sl.disabled = true; $('sname').textContent = 'Select a ⇄ or ⊞ tile to adjust'; $('sval').textContent = ''; return; }
+  sl.disabled = false; $('sname').textContent = t.label;
+  if (t.kind === 'bits16') { drawBits(); $('sval').textContent = tileVal(t); return; }
+  if (t.scale === 'list') { sl.min = 0; sl.max = $(t.input).options.length - 1; sl.step = 1; sl.value = $(t.input).selectedIndex; }
+  else {
+    sl.min = 0; sl.max = 1000; sl.step = 1;
+    const [mn, mx] = t.range ? t.range() : [t.min, t.max], v = Math.min(mx, Math.max(mn, Number($(t.input).value)));
+    sl.value = t.scale === 'log' ? Math.round(1000 * Math.log(v / mn) / Math.log(mx / mn)) : Math.round(1000 * (v - mn) / (mx - mn));
+  }
+  $('sval').textContent = tileVal(t);
+}
+function setFromSlider() {
+  const t = selTile; if (!t) return;
+  const pos = Number($('slider').value);
+  if (t.scale === 'list') $(t.input).selectedIndex = pos;
+  else {
+    const [mn, mx] = t.range ? t.range() : [t.min, t.max];
+    let v = t.scale === 'log' ? mn * Math.pow(mx / mn, pos / 1000) : mn + (mx - mn) * pos / 1000;
+    const st = typeof t.step === 'function' ? t.step() : t.step;
+    v = t.scale === 'log' ? Number(v.toPrecision(4)) : Math.round(v / st) * st;
+    $(t.input).value = Number(v.toFixed(6));
+  }
+  fire(t.input); t.live?.(); renderTiles();
+}
+function nudge(dir) {
+  const t = selTile; if (!t) return;
+  if (t.steps) {                                    // next value of the 1-2-5 list above/below the current one
+    const v = Number($(t.input).value), list = dir > 0 ? t.steps : [...t.steps].reverse();
+    const nv = list.find(x => dir > 0 ? x > v * 1.0001 : x < v * 0.9999);
+    if (nv !== undefined) { $(t.input).value = nv; fire(t.input); t.live?.(); sliderSetup(); renderTiles(); }
+    return;
+  }
+  if (t.scale === 'lin') {
+    const [mn, mx] = t.range ? t.range() : [t.min, t.max], st = typeof t.step === 'function' ? t.step() : t.step;
+    $(t.input).value = Number(Math.min(mx, Math.max(mn, Number($(t.input).value) + dir * st)).toFixed(6));
+    fire(t.input); t.live?.(); sliderSetup(); renderTiles();
+  } else { const sl = $('slider'); sl.value = Number(sl.value) + dir * (t.scale === 'log' ? 5 : 1); setFromSlider(); }
+}
+function drawBits() {                              // 16 toggles, DIO15 at top left .. DIO0 at bottom right
+  const box = $('bits'), t = selTile, v = parseInt($(t.input).value, 16) & 0xffff;
+  box.replaceChildren();
+  for (let i = 15; i >= 0; i--) {
+    const b = document.createElement('button'); b.textContent = i; b.title = 'DIO' + i;
+    if (v >> i & 1) b.className = 'b1';
+    b.onclick = () => {
+      const nv = (parseInt($(t.input).value, 16) & 0xffff) ^ 1 << i;
+      $(t.input).value = nv.toString(16).padStart(4, '0'); fire(t.input); drawBits(); renderTiles();
+    };
+    box.append(b);
+  }
+}
+// exact entry: numbers with SI suffixes (k M m u n), list options by text or nearest value, masks in hex
+const editText = t => t.kind === 'bits16' ? hex4(t.input) : t.scale === 'list' ? selText(t.input) : String(Number(Number($(t.input).value).toPrecision(7)));
+function parseSI(txt) {
+  const m = txt.trim().replace(/,/g, '').match(/^([-+]?\d*\.?\d+(?:e[-+]?\d+)?)\s*([kKMGmuµn]?)/);
+  if (!m) return NaN;
+  return Number(m[1]) * ({ k: 1e3, K: 1e3, M: 1e6, G: 1e9, m: 1e-3, u: 1e-6, 'µ': 1e-6, n: 1e-9 }[m[2]] || 1);
+}
+function applyEdit() {
+  const t = selTile, txt = $('sedit').value; if (!t) return;
+  if (t.kind === 'bits16') {
+    const v = parseInt(txt.replace(/^0x/i, ''), 16); if (!Number.isFinite(v)) { log(`${t.label}: "${txt}" is not hex`); sliderSetup(); return; }
+    $(t.input).value = (v & 0xffff).toString(16).padStart(4, '0');
+  } else if (t.scale === 'list') {
+    const sel = $(t.input), opts = [...sel.options], norm = x => x.toLowerCase().replace(/\s+/g, '');
+    let i = opts.findIndex(o => norm(o.text) === norm(txt) || norm(o.value) === norm(txt));
+    if (i < 0) { const v = parseSI(txt); if (Number.isFinite(v)) i = opts.reduce((b, o, k) => Math.abs(Number(o.value) - v) < Math.abs(Number(opts[b].value) - v) ? k : b, 0); }
+    if (i < 0) { log(`${t.label}: no option "${txt}"`); sliderSetup(); return; }
+    sel.selectedIndex = i;
+  } else {
+    let v = parseSI(txt); if (!Number.isFinite(v)) { log(`${t.label}: "${txt}" is not a number`); sliderSetup(); return; }
+    const [mn, mx] = t.range ? t.range() : [t.min, t.max];
+    const c = Math.min(mx, Math.max(mn, v)); if (c !== v) log(`${t.label}: ${txt} clamped to ${c}`);
+    $(t.input).value = c;
+  }
+  fire(t.input); t.live?.(); sliderSetup(); renderTiles();
+}
+$('sedit').addEventListener('keydown', e => { if (e.key === 'Enter') { applyEdit(); $('sedit').select(); } if (e.key === 'Escape') { sliderSetup(); $('sedit').blur(); } });
+$('sedit').addEventListener('blur', () => sliderSetup());
+$('slider').addEventListener('input', setFromSlider);
+$('sminus').onclick = () => nudge(-1); $('splus').onclick = () => nudge(1);
+function buildTiles() {
+  const box = $('tiles'); let col = null;
+  for (const t of TILES) {
+    if (t.g) {
+      const h = document.createElement('div'); h.className = 'tgrp'; h.textContent = t.g; col = t.col || null;
+      if (col) { h.style.color = `var(${col})`; h.style.borderBottom = `2px solid var(${col})`; h.style.paddingBottom = '2px'; }
+      box.append(h); continue;
+    }
+    const b = document.createElement('button'); b.className = 'tile ' + t.kind; b.id = t.id;
+    if (col) b.style.borderLeft = `4px solid var(${col})`;
+    b.dataset.help = (HELP[t.id] || t.label) + ' ' + KIND_HINT[t.kind];
+    b.innerHTML = `<span class="tl"></span><span class="tv"></span>`; b.querySelector('.tl').textContent = t.label;
+    b.onclick = () => {
+      if (t.kind === 'var' || t.kind === 'bits16') { selTile = selTile === t ? null : t; try { localStorage.setItem('ad2-tile', selTile ? t.id : ''); } catch {} sliderSetup(); }
+      else if (t.kind === 'cycle') { cycle(t.input); t.live?.(); }
+      else { t.click(); if (t.kind === 'act') { b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 180); } }
+      renderTiles();
+    };
+    box.append(b);
+  }
+}
+function renderTiles() {
+  for (const t of TILES) {
+    if (t.g) continue; const b = $(t.id);
+    b.querySelector('.tv').textContent = tileVal(t);
+    b.classList.toggle('sel', selTile === t); b.classList.toggle('on', !!(t.on && t.on()));
+  }
+  $('l_link').classList.toggle('on', !!ad);                       // status LEDs, as on DSPECT
+  $('l_trig').classList.toggle('on', !!(last && last.triggered));
+  $('l_ovr').classList.toggle('on', !!(last && last.clip && (last.clip[0] || last.clip[1])));
+  if (selTile) { $('sval').textContent = tileVal(selTile); if (document.activeElement !== $('sedit')) $('sedit').value = editText(selTile); }
+}
+// ---------- help mode: hover (or focus) a control to see what it does ----------
+let helpOn = false;
+function setHelp(on) {
+  helpOn = on; document.body.classList.toggle('help', on);
+  for (const b of document.querySelectorAll('.helpbtn')) b.setAttribute('aria-pressed', String(on));
+  if (!on) $('tip').hidden = true;
+  try { localStorage.setItem('ad2-help', on ? '1' : '0'); } catch {}
+}
+for (const b of document.querySelectorAll('.helpbtn')) b.addEventListener('click', () => setHelp(!helpOn));
+function showTip(el) {
+  const tip = $('tip'); tip.textContent = el.dataset.help; tip.hidden = false;
+  const r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight, inPanel = !!el.closest('#panel');
+  const pr = $('panel').getBoundingClientRect(), right = document.body.classList.contains('side-right');
+  let x = inPanel ? (right ? pr.left - tw - 8 : pr.right + 8) : r.left, y = inPanel ? r.top : r.bottom + 8;
+  if (x + tw > innerWidth - 8) x = Math.max(8, innerWidth - tw - 8);
+  if (y + th > innerHeight - 8) y = inPanel ? Math.max(8, innerHeight - th - 8) : Math.max(8, r.top - th - 8);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+const helpTarget = e => helpOn && e.target.closest && e.target.closest('[data-help]');
+document.addEventListener('mouseover', e => { const el = helpTarget(e); if (el) showTip(el); });
+document.addEventListener('mouseout', e => { const el = helpTarget(e); if (el && !el.contains(e.relatedTarget)) $('tip').hidden = true; });
+document.addEventListener('focusin', e => { const el = helpTarget(e); if (el) showTip(el); });
+document.addEventListener('focusout', () => { $('tip').hidden = true; });
+$('panel').addEventListener('scroll', () => { $('tip').hidden = true; });
+function setPanel(open) { document.body.classList.toggle('panel-open', open); try { localStorage.setItem('ad2-panel', open ? '1' : '0'); } catch {} draw(); ladraw(); }
+$('popen').onclick = () => setPanel(true); $('pclose').onclick = () => setPanel(false);
+function setSide(right) {
+  document.body.classList.toggle('side-right', right);
+  $('pside').textContent = right ? '⇤ Left' : 'Right ⇥';
+  try { localStorage.setItem('ad2-side', right ? 'right' : 'left'); } catch {}
+  draw(); ladraw();
+}
+$('pside').onclick = () => setSide(!document.body.classList.contains('side-right'));
+buildTiles();
+document.addEventListener('change', () => { if (selTile) sliderSetup(); renderTiles(); });
+document.addEventListener('input', e => { if (e.target.id !== 'slider') renderTiles(); });
+setInterval(renderTiles, 500);                     // running state, captures and monitor text change underneath
+// remember control settings across reloads (per browser; storage may be unavailable)
+const KEEP = ['rate', 'slobes', 'sorder', 'view', 'swin', 'strace', 'sN', 'sref', 'sdiv', 'fmax', 'flog', 'smark', 'vis1', 'vis2', 'avgon', 'avgN', 'r1', 'r2', 'vdiv1', 'vdiv2', 'off1', 'off2', 'tsrc', 'tedge', 'tlev', 'shape', 'freq', 'a1', 'a2', 'ph', 'vp', 'vm', 'lrate', 'lch', 'ltrig', 'lmask', 'lval', 'ledge', 'lpol', 'lzoom', 'pgmask', 'pgrate', 'dout', 'doe'];
+try { const st = JSON.parse(localStorage.getItem('ad2-controls') || '{}'); for (const id of KEEP) if (id in st) $(id).value = st[id]; } catch {}
+for (const id of KEEP) $(id).addEventListener('change', () => {
+  try { const st = {}; for (const k of KEEP) st[k] = $(k).value; localStorage.setItem('ad2-controls', JSON.stringify(st)); } catch {}
+});
+try {
+  setSide(localStorage.getItem('ad2-side') !== 'left');
+  setPanel(localStorage.getItem('ad2-panel') !== '0'); setHelp(localStorage.getItem('ad2-help') === '1');
+  const id = localStorage.getItem('ad2-tile'); selTile = TILES.find(t => t.id === id && (t.kind === 'var' || t.kind === 'bits16')) || null;
+} catch { setSide(true); setPanel(true); }
+if ($('avgN').selectedIndex < 0) $('avgN').value = '16';
+syncRange(); sliderSetup(); renderTiles();
+setBusy(false); draw(); ladraw();
+// test hook (only with #debug in the URL): draw a synthetic capture without a board
+if (location.hash === '#debug') window.ad2debug = {
+  sineResidual,
+  async startupWith(fake) { ad = fake; await startup(); return { ready: boardReady, state: $('state').textContent }; },
+  scope(ch1, ch2, dt = 1e-6) { specUpdate(ch1, ch2, dt); last = { ch1, ch2, dt, pre: 0, o: opts(), ms: 0, triggered: false }; draw(); return last.peaks; },
+  feed(ch1, ch2, pre, triggered = true, dt = 1e-6) {  // one synthetic capture through the averaging path
+    const o = opts(), r = { ch1, ch2, dt, pre, triggered }, d = accumulate(r, o);
+    last = { ...r, ch1: d.ch1, ch2: d.ch2, avgInfo: d.avgInfo, o, ms: 0 }; draw(); renderTiles(); return { n: avg.n, info: d.avgInfo, ch1: d.ch1 };
+  } };
+</script>
+</body>
+</html>
