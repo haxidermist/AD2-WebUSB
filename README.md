@@ -2,7 +2,7 @@
 
 A browser instrument panel for the Digilent Analog Discovery 2: oscilloscope, spectrum analyser, waveform
 generator, power supplies, logic analyser and digital outputs. It runs entirely in the browser over WebUSB and
-loads its own FPGA design into the board. No WaveForms, no Adept, no install, no server.
+loads its own open-source FPGA design ([`hdl/`](hdl/)) into the board. No WaveForms, no Adept, no install, no server.
 
 **It runs anywhere Chrome (or another Chromium browser such as Edge) runs: Linux, Windows, macOS, ChromeOS.**
 The app itself is the same everywhere. The only platform-specific piece is a small helper script that Linux
@@ -117,4 +117,5 @@ the other side. Settings are remembered in the browser.
 |---|---|
 | `ad2.html` | The whole application: page, USB driver and FPGA design in one file. |
 | `detach.py` | Linux only: releases the board from the kernel serial driver. |
+| `hdl/` | Verilog source, pin map and build script of the FPGA design ([details](hdl/README.md)). |
 | `LICENSE` | MIT licence. |
