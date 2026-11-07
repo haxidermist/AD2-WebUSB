@@ -730,7 +730,8 @@ const kTopBit = () => new Response(new Blob([Uint8Array.from(atob(K_TOP_GZ), c =
 const $ = id => document.getElementById(id);
 const log = s => {
   const l = $('log'); l.textContent += s + '\n'; l.scrollTop = l.scrollHeight;
-  if (location.protocol !== 'file:') fetch('log', { method: 'POST', body: s }).catch(() => {});   // serve.py appends it to page.log (best effort)
+  if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname))       // only to serve.py on this machine, never to a web host
+    fetch('log', { method: 'POST', body: s }).catch(() => {});   // serve.py appends it to page.log (best effort)
 };
 const hex = (v, n) => (v >>> 0).toString(16).padStart(n, '0');
 // every outside call into the driver is queued: a tile change during Run waits for the current capture instead of

@@ -46,6 +46,40 @@ driver may own the device; if Connect cannot open the board there, the WinUSB dr
 
 ## What it does
 
+![Oscilloscope: a 1 kHz, 1.5 V sine from the waveform generator, looped back into CH1](screenshots/scope.png)
+
+**A bench instrument in a browser tab.** Plug in the board, click Connect, and within a couple of seconds you
+have a two-channel 100 MS/s oscilloscope, a spectrum analyser, a two-channel waveform generator, programmable
+power supplies and a 16-channel logic analyser with a pattern generator. Everything runs locally on your
+machine: the page talks straight to the board over USB, nothing is sent anywhere, and it keeps working offline.
+
+**Real instrument behaviour, not a toy.** Readings use the calibration stored in your board's own EEPROM. The
+scope triggers on every 100 MS/s sample, picks the hardware input range for you as you change volts per
+division, and flags clipping. Averaging is aligned to the trigger, so repetitive signals clean up instead of
+smearing. The spectrum view is a calibrated 8192-point FFT in dBV with a choice of windows, averaging,
+max-hold and an interpolated peak marker.
+
+![Spectrum analyser: a 20-lobe sinc from the generator at 2 kHz, showing its flat comb of harmonics to 40 kHz](screenshots/spectrum.png)
+
+**A generator with more than the usual shapes.** Besides sine, square, triangle and sawtooth, the waveform
+generator can play a band-limited sinc (a flat comb of equal harmonics, handy for a quick frequency-response
+sweep) and a pseudo-random PRBS sequence (a spread-spectrum test signal). Frequency, amplitude and the phase of
+W2 against W1 change live while it plays.
+
+**Digital in and out.** The logic analyser captures all 16 DIO pins at up to 100 MS/s with a pattern-and-edge
+trigger and zoom. The same pins can be driven as static outputs or play a counter pattern, which is also a
+quick way to check the analyser.
+
+![Logic analyser: the counter pattern on DIO 0–7 at 1 M words/s, captured at 10 MS/s and zoomed 8×](screenshots/logic.png)
+
+**Controls built for one hand on the probe.** Every control is a tile showing its current value. Click one and
+adjust it with the slider, the −/+ buttons, or by typing an exact value. Turn on help to get an explanation of
+any tile on mouse-over.
+
+The screenshots are of the app running on a real board, with W1 looped back to CH1.
+
+### Specifications
+
 | Instrument | Details |
 |---|---|
 | Oscilloscope | 2 channels, 14-bit, 10 kS/s to 100 MS/s, 8192 samples. 1 mV/div to 5 V/div with offset; the two hardware input ranges (±2.7 V and ±25 V) are picked automatically. Edge trigger on CH1 or CH2 with auto timeout. Trigger-aligned averaging. |
