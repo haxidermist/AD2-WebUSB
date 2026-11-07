@@ -1,8 +1,12 @@
 # AD2 WebUSB
 
 A browser instrument panel for the Digilent Analog Discovery 2: oscilloscope, spectrum analyser, waveform
-generator, power supplies, logic analyser and digital outputs. It runs entirely in Chrome over WebUSB and loads
-its own FPGA design into the board. No WaveForms, no Adept, no drivers to install, no server.
+generator, power supplies, logic analyser and digital outputs. It runs entirely in the browser over WebUSB and
+loads its own FPGA design into the board. No WaveForms, no Adept, no install, no server.
+
+**It runs anywhere Chrome (or another Chromium browser such as Edge) runs: Linux, Windows, macOS, ChromeOS.**
+The app itself is the same everywhere. The only platform-specific piece is a small helper script that Linux
+needs (see below).
 
 This is an independent project. It is not made, supported or endorsed by Digilent. Analog Discovery is a
 trademark of Digilent.
@@ -11,7 +15,9 @@ trademark of Digilent.
 
 ## Quick start
 
-1. Plug in the Analog Discovery 2. On Linux, download `detach.py` and run `python3 detach.py` (see below).
+1. Plug in the Analog Discovery 2.
+   *Linux only:* download `detach.py` and run `python3 detach.py` once after plugging in (see below).
+   Windows, macOS and ChromeOS users skip this step.
 2. Open the [hosted app](https://haxidermist.github.io/AD2-WebUSB/ad2.html) in Chrome or another Chromium browser.
    It also works offline: download `ad2.html` and double-click it.
 3. Click **Connect** and choose "Digilent USB Device".
@@ -21,14 +27,22 @@ calibration from its EEPROM and shows "ready", usually within a couple of second
 
 ## Requirements
 
-- **Browser:** Chrome, Edge or another Chromium browser with WebUSB. Firefox and Safari have no WebUSB.
-- **Linux:** tested. After every plug-in, the kernel's `ftdi_sio` serial driver claims the board, and the
-  browser then cannot open it ("Unable to claim interface"). Run `python3 detach.py` to release it. It needs
-  only Python 3 and libusb-1.0, runs as a normal user (with the same USB access WaveForms needs), and changes
-  nothing permanently. Without it, Connect fails.
-- **Windows and macOS:** not tested. On Windows the Digilent/FTDI driver normally owns the device, and WebUSB
-  would need the WinUSB driver instead (which in turn stops WaveForms from seeing the board).
+- **Any operating system with a Chromium browser:** Chrome, Edge and most other Chromium browsers have WebUSB.
+  Firefox and Safari do not, so the app cannot reach the board from them.
 - Close WaveForms and any other tab using the board first: only one program can hold it at a time.
+
+### Linux only: `detach.py`
+
+On Linux, the kernel's `ftdi_sio` serial driver claims the board every time it is plugged in, and the browser
+then cannot open it ("Unable to claim interface"). Run `python3 detach.py` after each plug-in to release it.
+It needs only Python 3 and libusb-1.0, runs as a normal user (with the same USB access WaveForms needs), and
+changes nothing permanently. No other platform needs it.
+
+### Tested so far
+
+The app has been tested on Linux. Windows and macOS have not been tried yet. On Windows the Digilent/FTDI
+driver may own the device; if Connect cannot open the board there, the WinUSB driver would be needed instead
+(which in turn stops WaveForms from seeing the board). Reports from other platforms are welcome.
 
 ## What it does
 
@@ -68,5 +82,5 @@ the other side. Settings are remembered in the browser.
 | File | Purpose |
 |---|---|
 | `ad2.html` | The whole application: page, USB driver and FPGA design in one file. |
-| `detach.py` | Linux helper that releases the board from the kernel serial driver. |
+| `detach.py` | Linux only: releases the board from the kernel serial driver. |
 | `LICENSE` | MIT licence. |
