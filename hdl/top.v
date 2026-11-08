@@ -9,7 +9,8 @@
 //   [1] load enable, [2] play, [3] invert DCLKIO, [4] swap A/B halves, [5] DCM reset, [28:16] last playback address;
 //   [1] = 1 forces a trigger; 5D sets dec [23:0] and pre [36:24]; 5E sets level [13:0], hysteresis [27:14], source [28]
 //   (0 CH1, 1 CH2), slope [29] (0 rising), trigger enable [30]; 5C sets the gain switches;
-//   capture {8'hA5, 5'b0, dcm_locked, ld, done, run, stage[1:0], tpos[12:0], 7'b0, khz[16:0]} (khz = H12 cycles per 1 ms of P7).
+//   capture {8'hA5, 2'b10, ovf, fifo_alive, fifo_dcm_locked, dcm_locked, ld, done, run, stage[1:0], tpos[12:0], 7'b0, khz[16:0]}
+//   (khz = H12 cycles per 1 ms of P7); bit 47 = 1 announces the 8-bit FIFO (4 bytes per memory word).
 // USER3 DR (64 bits): [31:0] out, [63:32] oe; capture {oe, pins}. Reset = WaveForms idle levels.
 // USER4 DR: capture loads a 32-bit header {8'hA5, triggered, 10'b0, tpos[12:0]}, then shifting streams mem[0], mem[1], ... LSB first;
 //   with load enable, every 32 shifted-in bits are written to the AWG memory at 8191, 0, 1, ... (first word is a dummy).
@@ -21,7 +22,8 @@ module top(
     inout  [1:0] tp,                                  // trigger pins T1 = E2, T2 = E1
     input  clk60, input rxf_n, input txe_n,           // FT232H sync FIFO: CLKOUT N8, RXF# N11, TXE# P11
     output rd_n, output wr_n, output oe_n,            // RD# N10, WR# P10, OE# P8
-    inout  [6:0] ud,                                  // D0 N13 (= JTAG TCK, held low), D1 P13, D3 P12, D4 L8, D5 N9, D6 M8, D7 N7
+    inout  [6:0] ud,                                  // D0 N13, D1 P13, D3 P12, D4 L8, D5 N9, D6 M8, D7 N7
+    inout  ud2,                                       // D2 N12 (reaches the FT232H only while N6 holds the JTAG buffers off)
     output siwu,                                      // P9, held high
     output [13:0] da, output dclk,
     input  [13:0] ad,
@@ -274,7 +276,7 @@ module top(
     wire mwbusy, mwckw; wire [15:0] mwd;
     wire locked;
     always @(posedge tck) begin
-        if (sel2 && capture) sr2 <= esel ? {8'hA7, 23'b0, mwbusy, mwa, mwd} : csel ? {8'hA6, 32'h0, dpad} : {8'hA5, 2'b0, ovf_st, alive, ulocked, locked, ld, done, run, stg, tpos, 7'b0, khz};
+        if (sel2 && capture) sr2 <= esel ? {8'hA7, 23'b0, mwbusy, mwa, mwd} : csel ? {8'hA6, 32'h0, dpad} : {8'hA5, 2'b10, ovf_st, alive, ulocked, locked, ld, done, run, stg, tpos, 7'b0, khz};
         else if (sel2 && shift) sr2 <= {tdi, sr2[55:1]};
         if (sel2 && update && sr2[55:48] == 8'h5A && sr2[0]) arm <= ~arm;
         if (sel2 && update && sr2[55:48] == 8'h5A && sr2[1]) frc <= ~frc;
@@ -321,7 +323,8 @@ module top(
             assign pin_in[i] = outv[i];
         end else begin : p
             IOBUF b (.IO(pp[i - (i > 4) - (i > 5) - (i > 6) - (i > 9) - (i > 10) - (i > 12) - (i > 26)]),
-                .I(i == 7 && mwbusy ? mwckw : outv[i]), .T(i == 7 && mwbusy ? 1'b0 : ~oe[i]), .O(pin_in[i]));   // bit 7 = P3 = IC37 CLK while a READ runs
+                .I(i == 7 && mwbusy ? mwckw : i == 3 && alive ? 1'b0 : outv[i]),
+                .T(i == 7 && mwbusy || i == 3 && alive ? 1'b0 : ~oe[i]), .O(pin_in[i]));   // bit 7 = P3 = IC37 CLK while a READ runs
         end
     end endgenerate
 
@@ -377,9 +380,10 @@ module top(
 
 
     // ---- USB: FT232H 245 synchronous FIFO (DPTI port 1), scope memory read side ----
-    // Data out: 30-bit words {flags[1:0], fall[13:0], rise[13:0]} as five 6-bit symbols, low symbol first; a symbol rides
-    // on D1 (bit 0) and D3..D7 (bits 1..5). D0 is the FPGA's JTAG TCK line: held low for the whole session. D2 (TDO) unused.
-    // Flow control: each byte the host sends grants 512 symbols. Snapshot: after every finished capture the reader restarts
+    // Data out: each memory word as 4 bytes, low byte first: scope {2'b0, flags[1:0], fall[13:0], rise[13:0]}, LA/average 32 bits.
+    // N6 (FT232H ACBUS7, the enable of the buffers between ADBUS0-3 and the FPGA's JTAG pins) is held low while CLKOUT runs,
+    // so D0-D3 are plain data (D2 = N12) and D0 no longer reaches TCK; it is released when the clock stops.
+    // Flow control: each byte the host sends grants 512 bytes. Snapshot: after every finished capture the reader restarts
     // at tpos - pre for 8192 words (time order). Continuous: reader follows the ring writer; flag bit 30 marks dropped samples.
     wire c60b, uc0, uclk;
     IBUFG ic60 (.I(clk60), .O(c60b));
@@ -406,11 +410,11 @@ module top(
     end
 
     (* IOB = "TRUE" *) reg rxf_q = 1'b1, txe_q = 1'b1;
-    (* IOB = "TRUE" *) reg [5:0] udout = 6'h0;
+    (* IOB = "TRUE" *) reg [7:0] udout = 8'h0;
     (* IOB = "TRUE" *) reg rd_p = 1'b1, wr_p = 1'b1, oe_p = 1'b1;
     reg rd_i = 1'b1, wr_i = 1'b1, uden = 1'b0;
-    assign ud[0] = alive ? 1'b0 : 1'bz;
-    assign ud[6:1] = (uden && alive) ? udout : 6'bz;
+    assign ud = (uden && alive) ? {udout[7:3], udout[1:0]} : 7'bz;
+    assign ud2 = (uden && alive) ? udout[2] : 1'bz;
     assign rd_n = rd_p; assign wr_n = wr_p; assign oe_n = oe_p;
     assign siwu = 1'b1;
 
@@ -419,10 +423,10 @@ module top(
     reg [13:0] urem = 14'h0;
     reg ucont = 1'b0;
     reg [35:0] wb = 36'h0;
-    reg [2:0] si = 3'd5;                               // last symbol of wb sent (= nlast: word used up)
+    reg [2:0] si = 3'd3;                               // last byte of wb sent (= nlast: word used up)
     reg ula = 1'b0;
     reg uavg = 1'b0;
-    wire [2:0] nlast = (ula || uavg) ? 3'd5 : 3'd4;   // LA and average words are 32 bits = 6 symbols, scope words 30 bits = 5
+    wire [2:0] nlast = 3'd3;                           // 4 bytes per word
     reg [31:0] mq = 32'h0;
     always @(posedge uclk) mq <= mem[ura];
     reg [12:0] wg1 = 13'h0, wg2 = 13'h0;
@@ -431,7 +435,7 @@ module top(
     reg [2:0] cds = 3'b0, css = 3'b0;
     reg [1:0] ulks = 2'b0;
     reg rd_prev = 1'b1, wr_prev = 1'b1;
-    wire acc = !wr_prev && !txe_q;                     // symbol presented two edges ago was taken
+    wire acc = !wr_prev && !txe_q;                     // byte presented two edges ago was taken
     wire got = !rd_prev && !rxf_q;                     // request byte taken at the last edge
     reg [23:0] quota = 24'h0;
     wire [35:0] mqp = (ula || uavg) ? {4'h0, mq} : {6'h0, mq[31:30], mq[29:16], mq[13:0]};
@@ -443,11 +447,10 @@ module top(
     wire [23:0] quota_n = quota + (got ? 24'd512 : 24'd0) - (acc ? 24'd1 : 24'd0);
     wire wordok_n = ucont ? (wa_u != ura_n) : (urem_n != 14'h0);
     wire symok_n = (si_n != nlast) || wordok_n;
-    reg [5:0] nsym;
+    reg [7:0] nsym;                                    // the byte after si_n: next word's byte 0 once si_n = nlast
     always @* case (si_n)
-        3'd0: nsym = wb_n[11:6]; 3'd1: nsym = wb_n[17:12]; 3'd2: nsym = wb_n[23:18]; 3'd3: nsym = (ula || si_n != nlast) ? wb_n[29:24] : mqp[5:0];
-        3'd4: nsym = (si_n != nlast) ? wb_n[35:30] : mqp[5:0];
-        default: nsym = mqp[5:0];
+        3'd0: nsym = wb_n[15:8]; 3'd1: nsym = wb_n[23:16]; 3'd2: nsym = wb_n[31:24];
+        default: nsym = mqp[7:0];
     endcase
     reg [1:0] us = 2'd0;
     reg ph = 1'b0, ovf_u = 1'b0;
@@ -474,7 +477,7 @@ module top(
             else begin rd_i <= 1'b0; rd_p <= 1'b0; end
         end
         2'd2: us <= 2'd0;
-        2'd3: begin                                    // two clocks per symbol: present, then wait for TXE# at the sample edge
+        2'd3: begin                                    // two clocks per byte: present, then wait for TXE# at the sample edge
             if (ph) begin begin wr_i <= 1'b1; wr_p <= 1'b1; end ph <= 1'b0; end
             else if (txe_q || !symok_n || quota_n == 24'h0) begin begin wr_i <= 1'b1; wr_p <= 1'b1; end us <= 2'd0; end
             else begin begin wr_i <= 1'b0; wr_p <= 1'b0; end ph <= 1'b1; udout <= nsym; end

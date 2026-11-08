@@ -16,7 +16,10 @@ design's bitstream, built from these files, so you only need them to study or ch
   control and status register, USER3 drives the 32-bit control port to the analog circuitry, and USER4 reads
   the capture memory or loads the AWG memory.
 - **Fast data path:** the FT232H synchronous FIFO (60 MHz) streams scope and logic-analyser captures to the
-  host, much faster than JTAG.
+  host, much faster than JTAG, as 4 bytes per memory word. On the AD2, FIFO data lines D0-D3 are shared with
+  the FT232H's JTAG lines through buffers enabled by pin N6 (the FT232H's ACBUS7). The design holds N6 low
+  while the FIFO clock runs, which frees D0-D3 for data (D2 is on N12), and releases it afterwards so JTAG
+  works again. Thanks to [nic3-14159/AD2_RE](https://github.com/nic3-14159/AD2_RE) for that pin information.
 - **Scope:** the dual 14-bit ADC on both edges of the 100 MHz sample clock, an 8192-sample capture memory,
   decimation and pre-trigger, edge trigger with hysteresis on either channel, and averaging and min/max modes.
 - **Waveform generator:** an 8192-point playback memory per channel and a DDS phase accumulator, driving the
@@ -45,7 +48,8 @@ USER2 commands are selected by the top byte of the 56-bit data register. The app
 | `68` | DDS frequency |
 | `69` | calibration EEPROM (Microwire) |
 
-The status word reads back the signature `A5`, so the app can tell this design is loaded.
+The status word reads back the signature `A5`, so the app can tell this design is loaded, and sets bit 47 to
+announce the 8-bit FIFO. The app reloads its own design if either is missing.
 
 ## Building
 
@@ -56,15 +60,15 @@ The status word reads back the signature `A5`, so the app can tell this design i
 The target part is `xc6slx16l-1L-cpg196`. The build takes a few minutes and writes `build/top.bit`.
 
 A build from these files is identical to the design embedded in `ad2.html` (apart from the build date in
-the file header). PAR reports a timing score of about 4750: some timing constraints are not met. The
+the file header). PAR reports a timing score of about 8000, all of it on the FIFO output delay constraint. The
 shipped design has the same result and works on the board, but this is a place to look first if you see
 glitches after changing the design.
 
 ## Trying a changed design
 
 In the app's top bar, choose your `top.bit` with the file picker, then click **Program file**. The page loads it
-over JTAG in place of the built-in design. The instrument tiles will only work if your design keeps the register interface above
-and the `A5` signature.
+over JTAG in place of the built-in design. The instrument tiles will only work if your design keeps the register interface above,
+the `A5` signature and the FIFO format.
 
 The design is for experimenting. It has been tested on one board, and a mistake in the pin map or the I/O
 settings could drive a pin against the analog circuitry, so check changes to `top.ucf` carefully.
