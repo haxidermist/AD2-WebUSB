@@ -29,7 +29,12 @@ design's bitstream, built from these files, so you only need them to study or ch
 - **Board control:** power supply enables, the scope gain switches, and a Microwire reader for the calibration
   EEPROM.
 
-USER2 commands are selected by the top byte of the 56-bit data register. The app's driver uses:
+USER2 commands are selected by the top byte of the 56-bit data register. They can be written over JTAG or sent
+through the USB FIFO as an 8-byte packet (`0x80` followed by the 7 bytes of the word, low byte first), so the app
+can capture without leaving FIFO mode. Any other byte the host sends grants 512 bytes of reply; an arm command
+clears the grant count, and after each capture the FPGA sends a header word, then the 8192-word snapshot.
+The commands are decoded in the FPGA's 12 MHz clock domain, so a JTAG write should be followed by a few idle
+TCKs before the next scan that depends on it (the app clocks 16). The app's driver uses:
 
 | Code | Function |
 |---|---|
@@ -48,8 +53,8 @@ USER2 commands are selected by the top byte of the 56-bit data register. The app
 | `68` | DDS frequency |
 | `69` | calibration EEPROM (Microwire) |
 
-The status word reads back the signature `A5`, so the app can tell this design is loaded, and sets bit 47 to
-announce the 8-bit FIFO. The app reloads its own design if either is missing.
+The status word reads back the signature `A5`, so the app can tell this design is loaded, and sets bits 47 and 46
+to announce the 8-bit FIFO and the FIFO command packets. The app reloads its own design if any of them is missing.
 
 ## Building
 
@@ -60,7 +65,7 @@ announce the 8-bit FIFO. The app reloads its own design if either is missing.
 The target part is `xc6slx16l-1L-cpg196`. The build takes a few minutes and writes `build/top.bit`.
 
 A build from these files is identical to the design embedded in `ad2.html` (apart from the build date in
-the file header). PAR reports a timing score of about 8000, all of it on the FIFO output delay constraint. The
+the file header). PAR reports a timing score of about 7000, all of it on the FIFO output delay constraint. The
 shipped design has the same result and works on the board, but this is a place to look first if you see
 glitches after changing the design.
 

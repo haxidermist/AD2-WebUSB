@@ -10,7 +10,8 @@
 //   [1] = 1 forces a trigger; 5D sets dec [23:0] and pre [36:24]; 5E sets level [13:0], hysteresis [27:14], source [28]
 //   (0 CH1, 1 CH2), slope [29] (0 rising), trigger enable [30]; 5C sets the gain switches;
 //   capture {8'hA5, 2'b10, ovf, fifo_alive, fifo_dcm_locked, dcm_locked, ld, done, run, stage[1:0], tpos[12:0], 7'b0, khz[16:0]}
-//   (khz = H12 cycles per 1 ms of P7); bit 47 = 1 announces the 8-bit FIFO (4 bytes per memory word).
+//   (khz = H12 cycles per 1 ms of P7); bit 47 = 1 announces the 8-bit FIFO (4 bytes per memory word),
+//   bit 46 = 1 FIFO command packets (see the USB section).
 // USER3 DR (64 bits): [31:0] out, [63:32] oe; capture {oe, pins}. Reset = WaveForms idle levels.
 // USER4 DR: capture loads a 32-bit header {8'hA5, triggered, 10'b0, tpos[12:0]}, then shifting streams mem[0], mem[1], ... LSB first;
 //   with load enable, every 32 shifted-in bits are written to the AWG memory at 8191, 0, 1, ... (first word is a dummy).
@@ -275,33 +276,46 @@ module top(
     reg [7:0] mwa = 8'h0; reg mwt = 1'b0;            // sig 69 [7:0]: IC37 word address; every sig 69 update starts one READ
     wire mwbusy, mwckw; wire [15:0] mwd;
     wire locked;
+    reg [55:0] jw = 56'h0, fw = 56'h0;                // command word from JTAG / from the FIFO
+    reg jt = 1'b0, ft = 1'b0, fa = 1'b0;
     always @(posedge tck) begin
-        if (sel2 && capture) sr2 <= esel ? {8'hA7, 23'b0, mwbusy, mwa, mwd} : csel ? {8'hA6, 32'h0, dpad} : {8'hA5, 2'b10, ovf_st, alive, ulocked, locked, ld, done, run, stg, tpos, 7'b0, khz};
+        if (sel2 && capture) sr2 <= esel ? {8'hA7, 23'b0, mwbusy, mwa, mwd} : csel ? {8'hA6, 32'h0, dpad} : {8'hA5, 2'b11, ovf_st, alive, ulocked, locked, ld, done, run, stg, tpos, 7'b0, khz};
         else if (sel2 && shift) sr2 <= {tdi, sr2[55:1]};
-        if (sel2 && update && sr2[55:48] == 8'h5A && sr2[0]) arm <= ~arm;
-        if (sel2 && update && sr2[55:48] == 8'h5A && sr2[1]) frc <= ~frc;
-        if (sel2 && update && sr2[55:48] == 8'h5D) begin dec <= sr2[23:0]; pre <= sr2[36:24]; cont <= sr2[37]; la <= sr2[38]; la200 <= sr2[39];
-            smode <= sr2[41:40]; avk <= sr2[46:42]; end
-        if (sel2 && update && sr2[55:48] == 8'h60) begin dvo <= sr2[15:0]; dvoe <= sr2[31:16]; end
-        if (sel2 && update && sr2[55:48] == 8'h61) begin lmask <= sr2[15:0]; lval <= sr2[31:16]; lch <= sr2[35:32]; ledge <= sr2[36]; lpol <= sr2[37]; end
-        if (sel2 && update && sr2[55:48] == 8'h63) begin pg_en <= sr2[0]; pg_sq <= sr2[1]; end
-        if (sel2 && update && sr2[55:48] == 8'h64) begin pgrun <= sr2[0]; pgload <= sr2[1]; pgonce <= sr2[2]; pglast <= sr2[26:16]; end
-        if (sel2 && update && sr2[55:48] == 8'h65) pgdiv <= sr2[23:0];
-        if (sel2 && update && sr2[55:48] == 8'h66) usr <= sr2[1:0];
-        if (sel2 && update && sr2[55:48] == 8'h68) begin ftw_t <= sr2[31:0]; dds_t <= sr2[32]; ftog <= ~ftog; end
-        if (sel2 && update && sr2[55:48] == 8'h67) begin
-            csrc <= sr2[2:0]; cpol <= sr2[3]; asrc <= sr2[6:4]; psrc <= sr2[10:8]; t1o <= sr2[14:12]; t2o <= sr2[18:16];
-        end
         if (sel2 && update) csel <= (sr2[55:48] == 8'h62);
         if (sel2 && update) esel <= (sr2[55:48] == 8'h69);
         if (sel2 && update && sr2[55:48] == 8'h69) begin mwa <= sr2[7:0]; mwt <= ~mwt; end
-        if (sel2 && update && sr2[55:48] == 8'h5A && sr2[2]) stopt <= ~stopt;
-        if (sel2 && update && sr2[55:48] == 8'h5E) begin
-            lvl <= sr2[13:0]; tlo <= sr2[13:0] - sr2[27:14]; thi <= sr2[13:0] + sr2[27:14];
-            tsrc <= sr2[28]; tslope <= sr2[29]; ten <= sr2[30];
+        if (sel2 && update) begin jw <= sr2; jt <= ~jt; end   // to the g0 decoder below
+    end
+    // USER2 commands are decoded in the always-running g0 (12 MHz) domain, from either JTAG (jw, toggle jt) or a FIFO
+    // command packet (fw, toggle ft, acknowledged by fa). Selects 62/69 stay in the JTAG domain: their result must be
+    // ready for the very next scan. The driver clocks a few idle TCKs after each USER2 write for the g0 latency.
+    reg [2:0] jts = 3'b0, cfs = 3'b0;
+    wire jev = jts[2] != jts[1], fev = !jev && cfs[2] != fa, cev = jev || fev;
+    wire [55:0] cw = jev ? jw : fw;
+    always @(posedge g0) begin
+        jts <= {jts[1:0], jt}; cfs <= {cfs[1:0], ft};
+        if (fev) fa <= cfs[2];
+        if (cev && cw[55:48] == 8'h5A && cw[0]) arm <= ~arm;
+        if (cev && cw[55:48] == 8'h5A && cw[1]) frc <= ~frc;
+        if (cev && cw[55:48] == 8'h5D) begin dec <= cw[23:0]; pre <= cw[36:24]; cont <= cw[37]; la <= cw[38]; la200 <= cw[39];
+            smode <= cw[41:40]; avk <= cw[46:42]; end
+        if (cev && cw[55:48] == 8'h60) begin dvo <= cw[15:0]; dvoe <= cw[31:16]; end
+        if (cev && cw[55:48] == 8'h61) begin lmask <= cw[15:0]; lval <= cw[31:16]; lch <= cw[35:32]; ledge <= cw[36]; lpol <= cw[37]; end
+        if (cev && cw[55:48] == 8'h63) begin pg_en <= cw[0]; pg_sq <= cw[1]; end
+        if (cev && cw[55:48] == 8'h64) begin pgrun <= cw[0]; pgload <= cw[1]; pgonce <= cw[2]; pglast <= cw[26:16]; end
+        if (cev && cw[55:48] == 8'h65) pgdiv <= cw[23:0];
+        if (cev && cw[55:48] == 8'h66) usr <= cw[1:0];
+        if (cev && cw[55:48] == 8'h68) begin ftw_t <= cw[31:0]; dds_t <= cw[32]; ftog <= ~ftog; end
+        if (cev && cw[55:48] == 8'h67) begin
+            csrc <= cw[2:0]; cpol <= cw[3]; asrc <= cw[6:4]; psrc <= cw[10:8]; t1o <= cw[14:12]; t2o <= cw[18:16];
         end
-        if (sel2 && update && sr2[55:48] == 8'h5B) begin acfg <= sr2[5:1]; alast <= sr2[28:16]; end
-        if (sel2 && update && sr2[55:48] == 8'h5C) gsw <= sr2[3:0];
+        if (cev && cw[55:48] == 8'h5A && cw[2]) stopt <= ~stopt;
+        if (cev && cw[55:48] == 8'h5E) begin
+            lvl <= cw[13:0]; tlo <= cw[13:0] - cw[27:14]; thi <= cw[13:0] + cw[27:14];
+            tsrc <= cw[28]; tslope <= cw[29]; ten <= cw[30];
+        end
+        if (cev && cw[55:48] == 8'h5B) begin acfg <= cw[5:1]; alast <= cw[28:16]; end
+        if (cev && cw[55:48] == 8'h5C) gsw <= cw[3:0];
     end
     assign tdo2 = sr2[0];
 
@@ -383,8 +397,12 @@ module top(
     // Data out: each memory word as 4 bytes, low byte first: scope {2'b0, flags[1:0], fall[13:0], rise[13:0]}, LA/average 32 bits.
     // N6 (FT232H ACBUS7, the enable of the buffers between ADBUS0-3 and the FPGA's JTAG pins) is held low while CLKOUT runs,
     // so D0-D3 are plain data (D2 = N12) and D0 no longer reaches TCK; it is released when the clock stops.
-    // Flow control: each byte the host sends grants 512 bytes. Snapshot: after every finished capture the reader restarts
-    // at tpos - pre for 8192 words (time order). Continuous: reader follows the ring writer; flag bit 30 marks dropped samples.
+    // Host -> FPGA bytes: 0x80 starts a command packet, followed by the 7 bytes (low first) of a USER2 word, executed as if
+    // written over JTAG (the reader stops taking bytes until the g0 decoder has it); any other byte grants 512 bytes of
+    // reply. An arm command (5A bit 0) clears the grant count, so the host sends arm, then the grants for the snapshot,
+    // and the data follows as soon as the capture finishes (a force, 5A bit 1, can be sent while waiting).
+    // Snapshot: after every finished capture the reader sends a header word {A5, triggered, half, 9'b0, tpos} and then
+    // 8192 words from tpos - pre (time order). Continuous: reader follows the ring writer; flag bit 30 marks dropped samples.
     wire c60b, uc0, uclk;
     IBUFG ic60 (.I(clk60), .O(c60b));
     reg udcm_rst = 1'b1;
@@ -411,6 +429,7 @@ module top(
 
     (* IOB = "TRUE" *) reg rxf_q = 1'b1, txe_q = 1'b1;
     (* IOB = "TRUE" *) reg [7:0] udout = 8'h0;
+    (* IOB = "TRUE" *) reg [7:0] udin = 8'h0;
     (* IOB = "TRUE" *) reg rd_p = 1'b1, wr_p = 1'b1, oe_p = 1'b1;
     reg rd_i = 1'b1, wr_i = 1'b1, uden = 1'b0;
     assign ud = (uden && alive) ? {udout[7:3], udout[1:0]} : 7'bz;
@@ -425,6 +444,7 @@ module top(
     reg [35:0] wb = 36'h0;
     reg [2:0] si = 3'd3;                               // last byte of wb sent (= nlast: word used up)
     reg ula = 1'b0;
+    reg hdr = 1'b0;                                    // next word is the snapshot header
     reg uavg = 1'b0;
     wire [2:0] nlast = 3'd3;                           // 4 bytes per word
     reg [31:0] mq = 32'h0;
@@ -438,13 +458,27 @@ module top(
     wire acc = !wr_prev && !txe_q;                     // byte presented two edges ago was taken
     wire got = !rd_prev && !rxf_q;                     // request byte taken at the last edge
     reg [23:0] quota = 24'h0;
-    wire [35:0] mqp = (ula || uavg) ? {4'h0, mq} : {6'h0, mq[31:30], mq[29:16], mq[13:0]};
+    wire [35:0] mqp = hdr ? {4'h0, 8'hA5, trg, tph, 9'b0, tpos} : (ula || uavg) ? {4'h0, mq} : {6'h0, mq[31:30], mq[29:16], mq[13:0]};
+    // command parser: cn = command bytes still to come; one byte may already be in flight when a packet completes, so it
+    // waits in hold while the previous command is pending (cpend: not yet acknowledged by the g0 decoder)
+    reg [2:0] cn = 3'd0;
+    reg [55:0] cbuf = 56'h0;
+    reg hv = 1'b0;
+    reg [7:0] hold = 8'h0;
+    reg [1:0] fas = 2'b0;
+    wire cpend = ft != fas[1];
+    wire pgot = hv ? !cpend : got && !cpend;           // a host byte to parse now (the held one first)
+    wire [7:0] pb = hv ? hold : udin;
+    wire gr = pgot && cn == 3'd0 && !pb[7];             // grant
+    wire cdone = pgot && cn == 3'd1;                    // last byte of a command packet
+    wire [55:0] fw_n = {pb, cbuf[55:8]};
+    wire rstop = cpend || hv || cdone;
     wire take = acc && si == nlast;
     wire [2:0] si_n = acc ? (si == nlast ? 3'd0 : si + 3'd1) : si;
     wire [35:0] wb_n = take ? mqp : wb;
-    wire [12:0] ura_n = take ? ura + 13'h1 : ura;
-    wire [13:0] urem_n = take ? urem - 14'h1 : urem;
-    wire [23:0] quota_n = quota + (got ? 24'd512 : 24'd0) - (acc ? 24'd1 : 24'd0);
+    wire [12:0] ura_n = take && !hdr ? ura + 13'h1 : ura;
+    wire [13:0] urem_n = take && !hdr ? urem - 14'h1 : urem;
+    wire [23:0] quota_n = (cdone && fw_n[55:48] == 8'h5A && fw_n[0]) ? 24'h0 : quota + (gr ? 24'd512 : 24'd0) - (acc ? 24'd1 : 24'd0);
     wire wordok_n = ucont ? (wa_u != ura_n) : (urem_n != 14'h0);
     wire symok_n = (si_n != nlast) || wordok_n;
     reg [7:0] nsym;                                    // the byte after si_n: next word's byte 0 once si_n = nlast
@@ -455,25 +489,33 @@ module top(
     reg [1:0] us = 2'd0;
     reg ph = 1'b0, ovf_u = 1'b0;
     always @(posedge uclk) begin
-        rxf_q <= rxf_n; txe_q <= txe_n;
+        rxf_q <= rxf_n; txe_q <= txe_n; udin <= {ud[6:2], ud2, ud[1:0]}; fas <= {fas[0], fa};
+        if (got && cpend) begin hold <= udin; hv <= 1'b1; end
+        else if (hv && !cpend) hv <= 1'b0;
+        if (pgot) begin
+            if (cn == 3'd0) begin if (pb[7]) cn <= 3'd7; end
+            else begin cbuf <= fw_n; cn <= cn - 3'd1; if (cn == 3'd1) begin fw <= fw_n; ft <= ~ft; end end
+        end
+        if (take) hdr <= 1'b0;
         rd_prev <= rd_i; wr_prev <= wr_i;
         wg1 <= wa_g; wg2 <= wg1; ura_g <= ura_n ^ (ura_n >> 1);
         cds <= {cds[1:0], cdt}; css <= {css[1:0], cst}; ulks <= {ulks[0], ulocked};
         si <= si_n; wb <= wb_n; ura <= ura_n; urem <= urem_n; quota <= quota_n;
-        if (take && mq[30] && !ula && !uavg) ovf_u <= 1'b1;
+        if (take && !hdr && mq[30] && !ula && !uavg) ovf_u <= 1'b1;
         ula <= la; uavg <= avg;
-        if (cds[2] != cds[1]) begin ura <= tpos - pre; urem <= 14'h2000; ucont <= 1'b0; si <= nlast; quota <= 24'h0; end
+        if (cds[2] != cds[1]) begin ura <= tpos - pre; urem <= 14'h2000; ucont <= 1'b0; si <= nlast; hdr <= 1'b1; end
         if (css[2] != css[1]) begin ura <= 13'h0; urem <= 14'h0; ucont <= 1'b1; si <= nlast; quota <= 24'h0; ovf_u <= 1'b0; end
         if (!ulks[1]) begin
             us <= 2'd0; begin rd_i <= 1'b1; rd_p <= 1'b1; end begin wr_i <= 1'b1; wr_p <= 1'b1; end oe_p <= 1'b1; uden <= 1'b0; ph <= 1'b0;
+            cn <= 3'd0; hv <= 1'b0;                     // session start: no half packet left over
         end else case (us)
         2'd0: begin
             begin rd_i <= 1'b1; rd_p <= 1'b1; end begin wr_i <= 1'b1; wr_p <= 1'b1; end uden <= 1'b0; ph <= 1'b0;
-            if (!rxf_q) begin oe_p <= 1'b0; us <= 2'd1; end
+            if (!rxf_q && !cpend && !hv) begin oe_p <= 1'b0; us <= 2'd1; end
             else if (!txe_q && symok_n && quota_n != 24'h0 && wr_prev) begin oe_p <= 1'b1; us <= 2'd3; uden <= 1'b1; end
         end
         2'd1: begin                                    // OE# low, then RD# low while request bytes remain
-            if (rxf_q) begin begin rd_i <= 1'b1; rd_p <= 1'b1; end oe_p <= 1'b1; us <= 2'd2; end
+            if (rxf_q || rstop) begin begin rd_i <= 1'b1; rd_p <= 1'b1; end oe_p <= 1'b1; us <= 2'd2; end
             else begin rd_i <= 1'b0; rd_p <= 1'b0; end
         end
         2'd2: us <= 2'd0;
