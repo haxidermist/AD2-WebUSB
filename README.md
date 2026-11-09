@@ -118,4 +118,5 @@ the other side. Settings are remembered in the browser.
 | `ad2.html` | The whole application: page, USB driver and FPGA design in one file. |
 | `detach.py` | Linux only: releases the board from the kernel serial driver. |
 | `hdl/` | Verilog source, pin map and build script of the FPGA design ([details](hdl/README.md)). |
+| `CHANGELOG.md` | What changed in each update ([change log](CHANGELOG.md)). |
 | `LICENSE` | MIT licence. |
