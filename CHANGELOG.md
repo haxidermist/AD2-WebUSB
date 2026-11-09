@@ -21,6 +21,19 @@ Notable changes to the app (`ad2.html`) and its FPGA design (`hdl/`), newest fir
 - Thanks to [nic3-14159/AD2_RE](https://github.com/nic3-14159/AD2_RE) for the pin information that made
   this possible.
 
+### Fixes
+- The first capture after a continuous stream, or after a capture whose read was aborted, could fail with
+  "bad FIFO header". Arming a capture now also resets the FPGA's FIFO reader.
+- **Disconnect** works while the scope or the logic analyser is running: it stops the run, lets the last
+  capture finish, then disconnects.
+
+### FPGA source restructured
+- The design in `hdl/` is split into one module per function (top level, capture engine, digital I/O and
+  pattern generator, waveform generator, USB FIFO, PLL writer, EEPROM reader), each with a comment block
+  describing its interface and data formats. Command codes have names, pins carry the board's net names, and
+  `build.sh` builds all files and reports which step failed. Behaviour is unchanged apart from the fix above:
+  every instrument feature was checked on the board against the previous build.
+
 ### Compatibility
 - The design announces these features in its status word (bits 47 and 46). If the board still holds an
   earlier build of the design, the app reloads its own.

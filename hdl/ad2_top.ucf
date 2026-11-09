@@ -1,0 +1,134 @@
+# Pin map of the Analog Discovery 2 FPGA (XC6SLX16-1L, CPG196) for ad2_top.v.
+# Worked out by probing the board, with net names from nic3-14159/AD2_RE where they are known.
+# Bank 1 and the AWG/ADC pins are 1.8 V (LVCMOS18), the rest 3.3 V (LVCMOS33).
+
+# ---- clocks ----
+NET "clk12_pin" LOC = "P7"  | IOSTANDARD = LVCMOS33;                 # 12 MHz oscillator (USB side)
+NET "clk12_pin" TNM_NET = "tn_p7";
+TIMESPEC "TS_p7" = PERIOD "tn_p7" 83.3 ns HIGH 50%;
+NET "adc_clk"   LOC = "H12" | IOSTANDARD = LVCMOS18;                 # AD9648 CLKOUT_SC, 100 MHz from the ADF4360
+NET "adc_clk" TNM_NET = "tn_h12";
+TIMESPEC "TS_h12" = PERIOD "tn_h12" 10 ns HIGH 50%;
+
+# ---- scope: ADG612 gain switches, AD9648 data ----
+NET "en_hg_sc1" LOC = "J4"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;
+NET "en_lg_sc1" LOC = "F3"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;
+NET "en_hg_sc2" LOC = "C1"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;
+NET "en_lg_sc2" LOC = "B1"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;
+NET "adc_d<0>"  LOC = "C13" | IOSTANDARD = LVCMOS18;                 # DOUT_SC_0
+NET "adc_d<1>"  LOC = "D14" | IOSTANDARD = LVCMOS18;
+NET "adc_d<2>"  LOC = "D13" | IOSTANDARD = LVCMOS18;
+NET "adc_d<3>"  LOC = "E14" | IOSTANDARD = LVCMOS18;
+NET "adc_d<4>"  LOC = "E13" | IOSTANDARD = LVCMOS18;
+NET "adc_d<5>"  LOC = "F14" | IOSTANDARD = LVCMOS18;
+NET "adc_d<6>"  LOC = "F13" | IOSTANDARD = LVCMOS18;
+NET "adc_d<7>"  LOC = "G14" | IOSTANDARD = LVCMOS18;
+NET "adc_d<8>"  LOC = "G13" | IOSTANDARD = LVCMOS18;
+NET "adc_d<9>"  LOC = "H14" | IOSTANDARD = LVCMOS18;
+NET "adc_d<10>" LOC = "H13" | IOSTANDARD = LVCMOS18;
+NET "adc_d<11>" LOC = "J14" | IOSTANDARD = LVCMOS18;
+NET "adc_d<12>" LOC = "J13" | IOSTANDARD = LVCMOS18;
+NET "adc_d<13>" LOC = "K14" | IOSTANDARD = LVCMOS18;                 # DOUT_SC_13
+
+# ---- ADF4360-9 clock synthesiser ----
+NET "clkd_le"   LOC = "M14" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # /CS_CLKD (LE)
+NET "clkd_sclk" LOC = "L14" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # SCLK_CLKD
+NET "clkd_sdio" LOC = "L13" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # SDIO_CLKD
+NET "clkd_ld"   LOC = "M13" | IOSTANDARD = LVCMOS18;                             # LD_CLKD, high = locked
+
+# ---- AWG: AD9717 data and clock ----
+NET "awg_d<0>"  LOC = "A10" | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;
+NET "awg_d<1>"  LOC = "B10" | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;
+NET "awg_d<2>"  LOC = "A9"  | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;
+NET "awg_d<3>"  LOC = "B9"  | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;
+NET "awg_d<4>"  LOC = "A8"  | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;
+NET "awg_d<5>"  LOC = "A3"  | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;
+NET "awg_d<6>"  LOC = "A4"  | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;
+NET "awg_d<7>"  LOC = "B5"  | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;
+NET "awg_d<8>"  LOC = "A5"  | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;
+NET "awg_d<9>"  LOC = "B6"  | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;
+NET "awg_d<10>" LOC = "A6"  | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;
+NET "awg_d<11>" LOC = "B7"  | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;
+NET "awg_d<12>" LOC = "A7"  | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;
+NET "awg_d<13>" LOC = "B8"  | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;
+NET "awg_clkio" LOC = "C8"  | IOSTANDARD = LVCMOS18 | DRIVE = 8 | SLEW = FAST;   # CLKIO_AWG (DCLKIO)
+
+# ---- supplies and board control (driven constantly) ----
+NET "en_dvcc1v8" LOC = "J12" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;  # 1.8 V digital supply (ADC), high = on
+NET "en_avcc"    LOC = "L4"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;  # analog 5 V supply, high = on
+NET "adg621_in"  LOC = "N4"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;  # ADG621 IN1/IN2, high as in WaveForms
+NET "pwrgd_usr"  LOC = "N5"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;  # PWRGD_USR (ADM1270 output), see README
+NET "en_pwr_usr" LOC = "P2"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;  # user supplies master enable
+
+# ---- control port (USER3): port_pad<n> = control-port bit b ----
+NET "port_pad<0>"  LOC = "B11" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b0  /CS_SC (AD9648 SPI)
+NET "port_pad<1>"  LOC = "A12" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b1  SCLK_SC
+NET "port_pad<2>"  LOC = "B12" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b2  SDIO_SC
+NET "port_pad<3>"  LOC = "N6"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;   # b3  FT232H ACBUS7 / JTAG buffer enable
+NET "port_pad<4>"  LOC = "P3"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;   # b7  EEPROM CLK
+NET "port_pad<5>"  LOC = "P5"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;   # b8  unused
+NET "port_pad<6>"  LOC = "N3"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;   # b11 SDA_AWG_OFF (AD5645R I2C)
+NET "port_pad<7>"  LOC = "J3"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;   # b13 SCL_AWG_OFF
+NET "port_pad<8>"  LOC = "D3"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;   # b14 EN_-5V0_USR
+NET "port_pad<9>"  LOC = "D4"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;   # b15 EN_5V0_USR
+NET "port_pad<10>" LOC = "F4"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;   # b16 EN_AUDIO
+NET "port_pad<11>" LOC = "C12" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b17 SDIN_OFF (AD5643 offset DAC)
+NET "port_pad<12>" LOC = "F11" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b18 /SYNC_SC_OFF
+NET "port_pad<13>" LOC = "D8"  | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b19 RESET_AWG
+NET "port_pad<14>" LOC = "F12" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b20 SCLK_OFF
+NET "port_pad<15>" LOC = "H11" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b21 green status LED
+NET "port_pad<16>" LOC = "J11" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b22 SCL_PWR (ADM1177, AD7415 I2C)
+NET "port_pad<17>" LOC = "K13" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b23 SDA_PWR
+NET "port_pad<18>" LOC = "A11" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b24 SET_ILIM_USR
+NET "port_pad<19>" LOC = "M4"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;   # b25 EN_VBUS
+NET "port_pad<20>" LOC = "A2"  | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b27 /CS_AWG (AD9717 SPI)
+NET "port_pad<21>" LOC = "B4"  | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b28 SCLK_AWG
+NET "port_pad<22>" LOC = "B3"  | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b29 SDIO_AWG
+NET "port_pad<23>" LOC = "D11" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b30 SET_FS_AWG1 (ADG787)
+NET "port_pad<24>" LOC = "C11" | IOSTANDARD = LVCMOS18 | DRIVE = 2 | SLEW = SLOW;   # b31 SET_FS_AWG2
+
+# ---- calibration EEPROM (93LC66B) ----
+NET "ee_cs"  LOC = "N2" | IOSTANDARD = LVCMOS33 | DRIVE = 4 | SLEW = SLOW;   # CS (also the FPGA's INIT_B), active high
+NET "ee_dio" LOC = "P4" | IOSTANDARD = LVCMOS33 | DRIVE = 4 | SLEW = SLOW;   # DI/DO
+
+# ---- digital I/O and trigger pins ----
+NET "dio<0>"  LOC = "D1" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<1>"  LOC = "D2" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<2>"  LOC = "F2" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<3>"  LOC = "G1" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<4>"  LOC = "J1" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<5>"  LOC = "J2" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<6>"  LOC = "H1" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<7>"  LOC = "H2" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<8>"  LOC = "G2" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<9>"  LOC = "F1" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<10>" LOC = "M1" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<11>" LOC = "M2" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<12>" LOC = "L1" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<13>" LOC = "L2" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<14>" LOC = "K1" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "dio<15>" LOC = "K2" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "trig<0>" LOC = "E2" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = SLOW;   # T1
+NET "trig<1>" LOC = "E1" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = SLOW;   # T2
+
+# ---- FT232H synchronous FIFO ----
+NET "ft_clk"    LOC = "N8"  | IOSTANDARD = LVCMOS33;                             # ACBUS5 CLKOUT, 60 MHz during sessions
+NET "ft_clk" TNM_NET = "tn_c60";
+TIMESPEC "TS_c60" = PERIOD "tn_c60" 16.6 ns HIGH 50%;
+NET "ft_rxf_n"  LOC = "N11" | IOSTANDARD = LVCMOS33;                             # ACBUS0 RXF#
+NET "ft_txe_n"  LOC = "P11" | IOSTANDARD = LVCMOS33;                             # ACBUS1 TXE#
+NET "ft_rd_n"   LOC = "N10" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;   # ACBUS2 RD#
+NET "ft_wr_n"   LOC = "P10" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;   # ACBUS3 WR#
+NET "ft_siwu_n" LOC = "P9"  | IOSTANDARD = LVCMOS33 | DRIVE = 2 | SLEW = SLOW;   # ACBUS4 SIWU#, held high
+NET "ft_oe_n"   LOC = "P8"  | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;   # ACBUS6 OE#
+NET "ft_d<0>"   LOC = "N13" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;   # ADBUS0 (also JTAG TCK via a buffer)
+NET "ft_d<1>"   LOC = "P13" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;   # ADBUS1 (TDI)
+NET "ft_d<2>"   LOC = "N12" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;   # ADBUS2 (TDO)
+NET "ft_d<3>"   LOC = "P12" | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;   # ADBUS3 (TMS)
+NET "ft_d<4>"   LOC = "L8"  | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "ft_d<5>"   LOC = "N9"  | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "ft_d<6>"   LOC = "M8"  | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+NET "ft_d<7>"   LOC = "N7"  | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = FAST;
+# FT232H timing: data valid 9.5 ns before the clock edge for 10.5 ns; outputs must settle 8 ns before the next edge
+OFFSET = IN 9.5 ns VALID 10.5 ns BEFORE "ft_clk" RISING;
+OFFSET = OUT 10 ns AFTER "ft_clk" RISING;
