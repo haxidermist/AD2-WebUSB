@@ -101,7 +101,7 @@ selects it. Use the slider, the −/+ buttons, or type an exact value: SI suffix
 The **ⓘ** button in the top bar shows help for each tile on mouse-over. The panel can be hidden or moved to
 the other side. Settings are remembered in the browser, separately for each copy of the page (the hosted
 app, a downloaded file, an Incognito window). If one copy behaves differently from another, for example
-much slower, its remembered settings differ: the **↺** button in the panel header resets them to the
+much slower, its remembered settings differ: the **↺ Reset** button next to Connect resets them to the
 defaults.
 
 ## Notes and limits

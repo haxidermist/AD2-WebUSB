@@ -22,7 +22,7 @@ Notable changes to the app (`ad2.html`) and its FPGA design (`hdl/`), newest fir
   this possible.
 
 ### Reset settings
-- A **↺** button in the controls panel resets all remembered settings to their defaults and reloads the
+- A **↺ Reset** button next to Connect resets all remembered settings to their defaults and reloads the
   page. Settings are stored per copy of the page, so the hosted app and a downloaded file can differ.
 
 ### Build label
