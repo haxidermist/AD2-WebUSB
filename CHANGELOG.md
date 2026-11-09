@@ -21,6 +21,9 @@ Notable changes to the app (`ad2.html`) and its FPGA design (`hdl/`), newest fir
 - Thanks to [nic3-14159/AD2_RE](https://github.com/nic3-14159/AD2_RE) for the pin information that made
   this possible.
 
+### Build label
+- The top bar shows when the page was built, next to the name, so a cached older copy is easy to spot.
+
 ### Fixes
 - The first capture after a continuous stream, or after a capture whose read was aborted, could fail with
   "bad FIFO header". Arming a capture now also resets the FPGA's FIFO reader.

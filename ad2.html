@@ -110,7 +110,7 @@
   .topbar { margin: 8px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); top: 8px; font-family: var(--cond); }
   .topbar .brand { color: var(--ok); font-size: 20px; font-weight: 700; letter-spacing: .5px; text-shadow: 0 0 8px rgba(51,224,90,.35); white-space: nowrap; }
   .topbar .brand span { color: var(--mut); font-weight: 400; font-size: 16px; text-shadow: none; }
-  .topbar .brand .ver { color: var(--ok); opacity: .7; font-size: 14px; font-weight: 700; }
+  .topbar .brand .ver { color: var(--ok); opacity: .7; font: 500 11px var(--mono); }
   .topbar .kv { font-family: var(--mono); }
   .topbar .sep { background: var(--line); }
   .leds { display: inline-flex; gap: 6px; align-items: center; }
@@ -182,7 +182,7 @@
 </aside>
 
 <header class="topbar">
-  <b class="brand">AD2 <span>WebUSB</span> <span class="ver">k</span></b>
+  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-09 02:02 UTC</span></b>
   <span class="leds"><span class="led g" id="l_link" title="link"></span><span class="led y" id="l_trig" title="trigger"></span><span class="led r" id="l_ovr" title="ADC clipped"></span></span>
   <button id="connect" class="primary" data-help="Connect to the Analog Discovery 2 over WebUSB. The first time, Chrome asks you to pick “Digilent USB Device”. Close WaveForms and any cap run first: only one program can hold the board.">Connect</button>
   <button id="disconnect" disabled data-help="Release the board so WaveForms or cap can use it. Outputs keep their last state.">Disconnect</button>
@@ -821,7 +821,7 @@ $('connect').onclick = () => guard(async () => {
   const known = (await navigator.usb.getDevices()).find(x => x.vendorId === 0x0403 && x.productId === 0x6014);
   const d = known || await navigator.usb.requestDevice({ filters: [{ vendorId: 0x0403, productId: 0x6014 }] });
   ad = serialised(new AD2(d, log)); await ad.open();
-  log('connected');
+  log('connected (page build ' + $('build').textContent + ')');
   await startup();
 });
 $('disconnect').onclick = async () => {

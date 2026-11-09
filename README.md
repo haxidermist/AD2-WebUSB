@@ -20,6 +20,8 @@ trademark of Digilent.
    Windows, macOS and ChromeOS users skip this step.
 2. Open the [hosted app](https://haxidermist.github.io/AD2-WebUSB/ad2.html) in Chrome or another Chromium browser.
    It also works offline: download `ad2.html` and double-click it.
+   The small date next to the name in the top bar is the page's build. If it is older than the latest entry
+   in the [change log](CHANGELOG.md), your browser is showing a cached copy: reload with Ctrl+Shift+R.
 3. Click **Connect** and choose "Digilent USB Device".
 
 The page loads its FPGA design if the board is blank, initialises the clocks and converters, reads the board's
