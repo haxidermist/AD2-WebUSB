@@ -59,7 +59,9 @@ machine: the page talks straight to the board over USB, nothing is sent anywhere
 scope triggers on every 100 MS/s sample, picks the hardware input range for you as you change volts per
 division, and flags clipping. Averaging is aligned to the trigger, so repetitive signals clean up instead of
 smearing. The spectrum view is a calibrated 8192-point FFT in dBV with a choice of windows, averaging,
-max-hold and an interpolated peak marker.
+max-hold and an interpolated peak marker. It runs free at full speed, or, with a trigger and Average on,
+shows the spectrum of the trigger-aligned average (vector averaging): the noise floor drops by about 3 dB
+per doubling of the count, which brings out small harmonics that power averaging leaves buried.
 
 ![Spectrum analyser: a 20-lobe sinc from the generator at 2 kHz, showing its flat comb of harmonics to 40 kHz](screenshots/spectrum.png)
 
@@ -85,7 +87,7 @@ The screenshots are of the app running on a real board, with W1 looped back to C
 | Instrument | Details |
 |---|---|
 | Oscilloscope | 2 channels, 14-bit, 10 kS/s to 100 MS/s, 8192 samples. 1 mV/div to 5 V/div with offset; the two hardware input ranges (±2.7 V and ±25 V) are picked automatically. Edge trigger on CH1 or CH2 with auto timeout. Trigger-aligned averaging. |
-| Spectrum analyser | 8192-point FFT of both channels in dBV. Blackman-Harris, Hann, flat-top or rectangular window; live, averaged or max-hold trace; linear or log frequency axis; peak marker. |
+| Spectrum analyser | 8192-point FFT of both channels in dBV. Blackman-Harris, Hann, flat-top or rectangular window; live, averaged or max-hold trace; vector averaging of trigger-aligned waveforms; linear or log frequency axis; peak marker. |
 | Waveform generator | W1 and W2: sine, square, triangle, sawtooth, sinc (1 to 100 lobes) and PRBS spread-spectrum (order 3 to 12), 1 Hz to 10 MHz, amplitude to 5 V, W2 phase offset. |
 | Power supplies | V+ and V− 0.5 to 5 V, on/off, USB or external power mode. Monitors show the USB and AUX input voltage and current and the board temperature. |
 | Logic analyser | 16 channels (DIO 0–15, view 8 or 16), selectable rate, pattern trigger with optional edge, zoom. |

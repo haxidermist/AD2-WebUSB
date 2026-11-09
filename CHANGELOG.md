@@ -21,6 +21,17 @@ Notable changes to the app (`ad2.html`) and its FPGA design (`hdl/`), newest fir
 - Thanks to [nic3-14159/AD2_RE](https://github.com/nic3-14159/AD2_RE) for the pin information that made
   this possible.
 
+### Spectrum and trigger
+- **Vector averaging:** in Spectrum view with a trigger and Average on, the spectrum is computed from the
+  trigger-aligned waveform average. With 64 averages the noise floor of a test signal dropped from -93 to
+  -116 dBV, and its harmonics became visible.
+- Otherwise the spectrum runs free instead of waiting for a trigger (about 44 updates/s at 1 MS/s, was
+  4-5 with no trigger signal).
+- The auto-trigger timeout follows the timebase: twice the record length, at least 50 ms (was a fixed
+  200 ms), so the scope with no trigger signal updates about twice as fast at short timebases.
+- The scope view no longer computes the hidden spectrum, so it updates faster.
+- Reconnecting after a page was closed or reloaded during a run could fail with "MPSSE sync failed".
+
 ### Reset settings
 - A **↺ Reset** button next to Connect resets all remembered settings to their defaults and reloads the
   page. Settings are stored per copy of the page, so the hosted app and a downloaded file can differ.
