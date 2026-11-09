@@ -21,6 +21,10 @@ Notable changes to the app (`ad2.html`) and its FPGA design (`hdl/`), newest fir
 - Thanks to [nic3-14159/AD2_RE](https://github.com/nic3-14159/AD2_RE) for the pin information that made
   this possible.
 
+### Reset settings
+- A **↺** button in the controls panel resets all remembered settings to their defaults and reloads the
+  page. Settings are stored per copy of the page, so the hosted app and a downloaded file can differ.
+
 ### Build label
 - The top bar shows when the page was built, next to the name, so a cached older copy is easy to spot.
 

@@ -99,7 +99,10 @@ All controls are tiles in the side panel, grouped like the front of a bench osci
 selects it. Use the slider, the −/+ buttons, or type an exact value: SI suffixes such as `2.5k`, `10m` or
 `1M` work, and bit tiles take hex. Toggle tiles switch on a click, cycle tiles step through their options.
 The **ⓘ** button in the top bar shows help for each tile on mouse-over. The panel can be hidden or moved to
-the other side. Settings are remembered in the browser.
+the other side. Settings are remembered in the browser, separately for each copy of the page (the hosted
+app, a downloaded file, an Incognito window). If one copy behaves differently from another, for example
+much slower, its remembered settings differ: the **↺** button in the panel header resets them to the
+defaults.
 
 ## Notes and limits
 

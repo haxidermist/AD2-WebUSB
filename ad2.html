@@ -171,7 +171,7 @@
 <body>
 <button id="popen" data-help="Show the control panel.">☰ Controls</button>
 <aside id="panel" aria-label="Control panel">
-  <div class="phead"><b>Controls</b><span class="row" style="gap:6px"><button class="helpbtn" aria-pressed="false" data-help="Help mode: when on, hovering a control shows what it does and how to change it. Click again to turn it off.">ⓘ Help</button><button id="pside" data-help="Move this panel to the other side of the window (default right). Remembered across reloads.">⇆</button><button id="pclose" data-help="Hide this panel. Bring it back with the ☰ Controls button.">Hide</button></span></div>
+  <div class="phead"><b>Controls</b><span class="row" style="gap:6px"><button class="helpbtn" aria-pressed="false" data-help="Help mode: when on, hovering a control shows what it does and how to change it. Click again to turn it off.">ⓘ Help</button><button id="pside" data-help="Move this panel to the other side of the window (default right). Remembered across reloads.">⇆</button><button id="preset" data-help="Reset all settings to their defaults: clears what this page remembers in this browser (control values, panel layout, help mode) and reloads the page, which disconnects the board. Useful if the page behaves differently here than elsewhere." aria-label="Reset settings" title="Reset settings">↺</button><button id="pclose" data-help="Hide this panel. Bring it back with the ☰ Controls button.">Hide</button></span></div>
   <div class="sbox">
     <div class="row" style="margin-bottom:6px"><span id="sname">Select a ⇄ or ⊞ tile to adjust</span><span id="sval" hidden></span>
       <input id="sedit" disabled spellcheck="false" aria-label="Exact value" data-help="Type an exact value for the selected tile and press Enter (Esc cancels). Numbers accept SI suffixes: 2.5k, 10M, 250m. Lists accept the option text or a number. Masks take hex."><span id="sunit" class="muted"></span></div>
@@ -182,7 +182,7 @@
 </aside>
 
 <header class="topbar">
-  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-09 02:02 UTC</span></b>
+  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-09 02:19 UTC</span></b>
   <span class="leds"><span class="led g" id="l_link" title="link"></span><span class="led y" id="l_trig" title="trigger"></span><span class="led r" id="l_ovr" title="ADC clipped"></span></span>
   <button id="connect" class="primary" data-help="Connect to the Analog Discovery 2 over WebUSB. The first time, Chrome asks you to pick “Digilent USB Device”. Close WaveForms and any cap run first: only one program can hold the board.">Connect</button>
   <button id="disconnect" disabled data-help="Release the board so WaveForms or cap can use it. Outputs keep their last state.">Disconnect</button>
@@ -1626,6 +1626,11 @@ function setSide(right) {
   draw(); ladraw();
 }
 $('pside').onclick = () => setSide(!document.body.classList.contains('side-right'));
+$('preset').onclick = () => {                      // forget everything this page stored, then start fresh
+  if (!confirm('Reset all settings to their defaults? The page reloads, which disconnects the board.')) return;
+  try { for (const k of ['ad2-controls', 'ad2-tile', 'ad2-help', 'ad2-panel', 'ad2-side']) localStorage.removeItem(k); } catch {}
+  location.reload();
+};
 buildTiles();
 document.addEventListener('change', () => { if (selTile) sliderSetup(); renderTiles(); });
 document.addEventListener('input', e => { if (e.target.id !== 'slider') renderTiles(); });
