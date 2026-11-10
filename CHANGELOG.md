@@ -4,8 +4,8 @@ Notable changes to the app (`ad2.html`) and its FPGA design (`hdl/`), newest fir
 
 ## 2026-11-10
 
-- README: Windows needs the WinUSB driver for the board, installed once with Zadig (tested); how to switch it
-  back for WaveForms. The app's connect error now points Windows users to it.
+- README: Windows needs the WinUSB driver for the board, installed once with Zadig (tested) or Windows' own
+  WinUsb Device driver in Device Manager; how to switch it back for WaveForms. The app's connect error now points Windows users to it.
 
 ## 2026-11-09
 

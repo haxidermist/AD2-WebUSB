@@ -36,15 +36,25 @@ calibration from its EEPROM and shows "ready", usually within a couple of second
 ### Windows: WinUSB driver (once, with Zadig)
 
 Windows binds the board to Digilent's FTDI driver, which the browser cannot use, so Connect either does not
-list the board or cannot open it. Give it the generic WinUSB driver instead, using
-[Zadig](https://zadig.akeo.ie):
+list the board or cannot open it. Give it the generic WinUSB driver instead. Either way works; WebUSB on
+Windows cannot use any other driver.
+
+**With [Zadig](https://zadig.akeo.ie)** (tested):
 
 1. Plug in the Analog Discovery 2 and run Zadig.
 2. In **Options**, tick **List All Devices**.
 3. Pick **Digilent USB Device** in the drop-down and check that the USB ID reads `0403 6014`.
 4. Set the target driver to **WinUSB** and click **Replace Driver** (or **Install Driver**).
 
-This stays in place across replugs and reboots. While the board has WinUSB, WaveForms and Adept cannot see it.
+**Or with Device Manager**, without downloading anything (Windows 10 and 11; menu wording varies a little):
+
+1. Plug in the board, open Device Manager and find **Digilent USB Device**.
+2. Right-click it, choose **Update driver**, then **Browse my computer for drivers**, then **Let me pick from a
+   list of available drivers on my computer**.
+3. Choose **Universal Serial Bus devices**, then **WinUsb Device**, click **Next** and confirm the warning.
+
+Either way, this stays in place across replugs and reboots. While the board has WinUSB, WaveForms and Adept
+cannot see it.
 To give it back to them, open Device Manager, find the board, choose **Uninstall device** with the option to
 delete the driver ticked, and replug it (or reinstall the Adept Runtime). Zadig installs the driver for the
 USB ID, so other FT232H-based gadgets with ID `0403 6014` on the same PC may pick it up too.
