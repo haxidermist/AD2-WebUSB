@@ -5,8 +5,8 @@ generator, power supplies, logic analyser and digital outputs. It runs entirely 
 loads its own open-source FPGA design ([`hdl/`](hdl/)) into the board. No WaveForms, no Adept, no install, no server.
 
 **It runs anywhere Chrome (or another Chromium browser such as Edge) runs: Linux, Windows, macOS, ChromeOS.**
-The app itself is the same everywhere. The only platform-specific piece is a small helper script that Linux
-needs (see below).
+The app itself is the same everywhere. The only platform-specific pieces are a one-time driver change on
+Windows and a small helper script on Linux (see below).
 
 This is an independent project. It is not made, supported or endorsed by Digilent. Analog Discovery is a
 trademark of Digilent.
@@ -16,8 +16,8 @@ trademark of Digilent.
 ## Quick start
 
 1. Plug in the Analog Discovery 2.
-   *Linux only:* download `detach.py` and run `python3 detach.py` once after plugging in (see below).
-   Windows, macOS and ChromeOS users skip this step.
+   *Windows, once:* install the WinUSB driver for the board with Zadig (see below).
+   *Linux:* download `detach.py` and run `python3 detach.py` once after plugging in (see below).
 2. Open the [hosted app](https://haxidermist.github.io/AD2-WebUSB/ad2.html) in Chrome or another Chromium browser.
    It also works offline: download `ad2.html` and double-click it.
    The small date next to the name in the top bar is the page's build. If it is older than the latest entry
@@ -33,18 +33,34 @@ calibration from its EEPROM and shows "ready", usually within a couple of second
   Firefox and Safari do not, so the app cannot reach the board from them.
 - Close WaveForms and any other tab using the board first: only one program can hold it at a time.
 
+### Windows: WinUSB driver (once, with Zadig)
+
+Windows binds the board to Digilent's FTDI driver, which the browser cannot use, so Connect either does not
+list the board or cannot open it. Give it the generic WinUSB driver instead, using
+[Zadig](https://zadig.akeo.ie):
+
+1. Plug in the Analog Discovery 2 and run Zadig.
+2. In **Options**, tick **List All Devices**.
+3. Pick **Digilent USB Device** in the drop-down and check that the USB ID reads `0403 6014`.
+4. Set the target driver to **WinUSB** and click **Replace Driver** (or **Install Driver**).
+
+This stays in place across replugs and reboots. While the board has WinUSB, WaveForms and Adept cannot see it.
+To give it back to them, open Device Manager, find the board, choose **Uninstall device** with the option to
+delete the driver ticked, and replug it (or reinstall the Adept Runtime). Zadig installs the driver for the
+USB ID, so other FT232H-based gadgets with ID `0403 6014` on the same PC may pick it up too.
+
 ### Linux only: `detach.py`
 
 On Linux, the kernel's `ftdi_sio` serial driver claims the board every time it is plugged in, and the browser
 then cannot open it ("Unable to claim interface"). Run `python3 detach.py` after each plug-in to release it.
 It needs only Python 3 and libusb-1.0, runs as a normal user (with the same USB access WaveForms needs), and
-changes nothing permanently. No other platform needs it.
+changes nothing permanently. Other platforms do not need it.
 
 ### Tested so far
 
-The app has been tested on Linux. Windows and macOS have not been tried yet. On Windows the Digilent/FTDI
-driver may own the device; if Connect cannot open the board there, the WinUSB driver would be needed instead
-(which in turn stops WaveForms from seeing the board). Reports from other platforms are welcome.
+- **Linux:** fully tested.
+- **Windows:** connects once the board has the WinUSB driver (Zadig, above).
+- **macOS, ChromeOS:** not tried yet. Reports are welcome.
 
 ## What it does
 

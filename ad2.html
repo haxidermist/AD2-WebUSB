@@ -182,9 +182,9 @@
 </aside>
 
 <header class="topbar">
-  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-09 02:57 UTC</span></b>
+  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-10 07:57 UTC</span></b>
   <span class="leds"><span class="led g" id="l_link" title="link"></span><span class="led y" id="l_trig" title="trigger"></span><span class="led r" id="l_ovr" title="ADC clipped"></span></span>
-  <button id="connect" class="primary" data-help="Connect to the Analog Discovery 2 over WebUSB. The first time, Chrome asks you to pick “Digilent USB Device”. Close WaveForms and any cap run first: only one program can hold the board.">Connect</button>
+  <button id="connect" class="primary" data-help="Connect to the Analog Discovery 2 over WebUSB. The first time, Chrome asks you to pick “Digilent USB Device”. Close WaveForms and any cap run first: only one program can hold the board. On Windows the board needs the WinUSB driver (install it once with Zadig, see the README); on Linux run detach.py after plugging it in.">Connect</button>
   <button id="disconnect" disabled data-help="Release the board so WaveForms or cap can use it. Outputs keep their last state.">Disconnect</button>
   <button id="preset" data-help="Reset all settings to their defaults: clears what this page remembers in this browser (control values, panel layout, help mode) and reloads the page, which disconnects the board. Useful if the page behaves differently here than elsewhere.">↺ Reset</button>
   <span id="state" class="muted">not connected</span>
@@ -308,7 +308,7 @@ class AD2 {
     if (!this.dev.configuration) await this.dev.selectConfiguration(1);
     try { await this.dev.claimInterface(0); }
     catch (e) {                                      // usually the kernel's ftdi_sio bound itself after a replug
-      throw new Error('cannot claim the AD2: on Linux run "python3 detach.py" (releases the ftdi_sio serial driver after a replug, see README), or close WaveForms / other AD2 tabs');
+      throw new Error('cannot claim the AD2: on Linux run "python3 detach.py" (releases the ftdi_sio serial driver after a replug); on Windows give the board the WinUSB driver with Zadig (once, see README); or close WaveForms / other AD2 tabs');
     }
     await this.jtagMode();
   }
@@ -823,7 +823,11 @@ async function startup() {
 $('connect').onclick = () => guard(async () => {
   if (!navigator.usb) throw new Error('WebUSB not available in this browser');
   const known = (await navigator.usb.getDevices()).find(x => x.vendorId === 0x0403 && x.productId === 0x6014);
-  const d = known || await navigator.usb.requestDevice({ filters: [{ vendorId: 0x0403, productId: 0x6014 }] });
+  let d = known;
+  if (!d) try { d = await navigator.usb.requestDevice({ filters: [{ vendorId: 0x0403, productId: 0x6014 }] }); }
+  catch (e) {                                       // chooser cancelled, or the board was not offered
+    throw new Error('no board chosen. If "Digilent USB Device" was not in the list: check the USB cable; on Windows the board needs the WinUSB driver (install it once with Zadig, see the README)');
+  }
   ad = serialised(new AD2(d, log)); await ad.open();
   log('connected (page build ' + $('build').textContent + ')');
   await startup();
