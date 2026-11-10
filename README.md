@@ -16,7 +16,7 @@ trademark of Digilent.
 ## Quick start
 
 1. Plug in the Analog Discovery 2.
-   *Windows, once:* install the WinUSB driver for the board with Zadig (see below).
+   *Windows, once:* give the board the WinUSB driver, with Zadig or Device Manager (see below).
    *Linux:* download `detach.py` and run `python3 detach.py` once after plugging in (see below).
 2. Open the [hosted app](https://haxidermist.github.io/AD2-WebUSB/ad2.html) in Chrome or another Chromium browser.
    It also works offline: download `ad2.html` and double-click it.
@@ -33,7 +33,7 @@ calibration from its EEPROM and shows "ready", usually within a couple of second
   Firefox and Safari do not, so the app cannot reach the board from them.
 - Close WaveForms and any other tab using the board first: only one program can hold it at a time.
 
-### Windows: WinUSB driver (once, with Zadig)
+### Windows: WinUSB driver (once)
 
 Windows binds the board to Digilent's FTDI driver, which the browser cannot use, so Connect either does not
 list the board or cannot open it. Give it the generic WinUSB driver instead. Either way works; WebUSB on
