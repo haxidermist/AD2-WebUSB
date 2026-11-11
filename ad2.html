@@ -182,7 +182,7 @@
 </aside>
 
 <header class="topbar">
-  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 02:46 UTC</span></b>
+  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 02:56 UTC</span></b>
   <span class="leds"><span class="led g" id="l_link" title="link"></span><span class="led y" id="l_trig" title="trigger"></span><span class="led r" id="l_ovr" title="ADC clipped"></span></span>
   <button id="connect" class="primary" data-help="Connect to the Analog Discovery 2 over WebUSB. The first time, Chrome asks you to pick “Digilent USB Device”. Close WaveForms and any cap run first: only one program can hold the board. On Windows the board needs the WinUSB driver (install it once with Zadig, see the README); on Linux run detach.py after plugging it in.">Connect</button>
   <button id="disconnect" disabled data-help="Release the board so WaveForms or cap can use it. Outputs keep their last state.">Disconnect</button>
@@ -235,7 +235,7 @@
   <select id="strace"><option value="live">live</option><option value="avg">average</option><option value="max">max hold</option></select>
   <select id="sN"><option>2</option><option>4</option><option selected>8</option><option>16</option><option>32</option><option>64</option><option>128</option></select>
   <input type="number" id="sref" value="10"><select id="sdiv"><option>1</option><option>2</option><option>5</option><option selected>10</option><option>20</option></select>
-  <input type="number" id="fmax" value="50000000"><select id="flog"><option value="lin">linear</option><option value="log">log</option></select>
+  <input type="number" id="fmax" value="50000000"><input type="number" id="fcen" value="0"><select id="flog"><option value="lin">linear</option><option value="log">log</option></select>
   <select id="smark"><option value="1">on</option><option value="0">off</option></select>
   <input type="number" id="vdiv1" value="0.5"><input type="number" id="vdiv2" value="0.5"><input type="number" id="off1" value="0"><input type="number" id="off2" value="0">
   <select id="tsrc"><option value="off">off</option><option value="0">CH1</option><option value="1">CH2</option><option value="awg">AWG</option><option value="d0">DIO 0</option><option value="d1">DIO 1</option><option value="d2">DIO 2</option><option value="d3">DIO 3</option><option value="d4">DIO 4</option><option value="d5">DIO 5</option><option value="d6">DIO 6</option><option value="d7">DIO 7</option><option value="d8">DIO 8</option><option value="d9">DIO 9</option><option value="d10">DIO 10</option><option value="d11">DIO 11</option><option value="d12">DIO 12</option><option value="d13">DIO 13</option><option value="d14">DIO 14</option><option value="d15">DIO 15</option></select>
@@ -1000,7 +1000,7 @@ $('run').onclick = async () => {
   catch (e) { log('error: ' + e.message); $('state').innerHTML = `<span class="bad">${e.message}</span>`; }
   running = false; $('run').textContent = 'Run'; setBusy(false);
 };
-for (const id of ['r1', 'r2', 'rate', 'tsrc', 'tlev', 'tedge', 'vdiv1', 'vdiv2', 'off1', 'off2', 'vis1', 'vis2', 'view', 'swin', 'strace', 'sN', 'sref', 'sdiv', 'fmax', 'flog', 'smark']) $(id).addEventListener('change', () => draw());
+for (const id of ['r1', 'r2', 'rate', 'tsrc', 'tlev', 'tedge', 'vdiv1', 'vdiv2', 'off1', 'off2', 'vis1', 'vis2', 'view', 'swin', 'strace', 'sN', 'sref', 'sdiv', 'fmax', 'fcen', 'flog', 'smark']) $(id).addEventListener('change', () => draw());
 // switching to Spectrum: start from the last capture (the FFT is not computed while the scope view is shown)
 $('view').addEventListener('change', () => { if ($('view').value === 'spec' && last) { specReset(); specUpdate(last.vec ? last.ch1 : last.raw1 || last.ch1, last.vec ? last.ch2 : last.raw2 || last.ch2, last.dt); draw(); } });
 
@@ -1073,13 +1073,21 @@ function peakOf(P, k0, k1, df) {
   const a = dBV(P[kb - 1]), b = dBV(P[kb]), c = dBV(P[kb + 1]), den = a - 2 * b + c, d = den ? 0.5 * (a - c) / den : 0;
   return { f: (kb + d) * df, db: b - 0.25 * (a - c) * d };
 }
+// displayed band from Centre and Span, shifted to stay within 0 Hz .. Nyquist (centre 0 = from 0 Hz)
+function specBand(fny) {
+  const span = Math.min(fny, Number($('fmax').value) || fny), c = Number($('fcen').value) || 0;
+  let lo = c - span / 2, hi = c + span / 2;
+  if (lo < 0) { hi -= lo; lo = 0; }
+  if (hi > fny) { lo = Math.max(0, lo - (hi - fny)); hi = fny; }
+  return [lo, hi];
+}
 function drawSpectrum(g, W, H) {
   const L = 58, R = 16, T = 8, Bm = 26, pw = W - L - R, ph = H - T - Bm;
   const ref = Number($('sref').value), per = Number($('sdiv').value), bottom = ref - 10 * per;
   const dt = last ? last.dt : 1e-6, fs = 1 / dt, df = fs / NF, fny = fs / 2;
-  const fmax = Math.min(fny, Number($('fmax').value) || fny), logx = $('flog').value === 'log', fmin = logx ? Math.max(df, fmax / 1e5) : 0;
-  const xf = f => L + (logx ? Math.log(Math.max(f, fmin) / fmin) / Math.log(fmax / fmin) : f / fmax) * pw;
-  const fx = x => logx ? fmin * Math.pow(fmax / fmin, (x - L) / pw) : (x - L) / pw * fmax;
+  const [lo, fmax] = specBand(fny), logx = $('flog').value === 'log', fmin = logx ? Math.max(df, lo, fmax / 1e5) : lo;
+  const xf = f => L + (logx ? Math.log(Math.max(f, fmin) / fmin) / Math.log(fmax / fmin) : (f - fmin) / (fmax - fmin)) * pw;
+  const fx = x => logx ? fmin * Math.pow(fmax / fmin, (x - L) / pw) : fmin + (x - L) / pw * (fmax - fmin);
   const yd = d => T + (ref - d) / (10 * per) * ph;
   g.font = '11px ' + (css('--mono') || 'monospace'); g.lineWidth = 1;
   for (let i = 0; i <= 10; i++) {                    // level grid
@@ -1088,7 +1096,7 @@ function drawSpectrum(g, W, H) {
   }
   const ticks = [];                                  // frequency grid: decades (log) or tenths of the span (linear)
   if (logx) { for (let d = Math.pow(10, Math.ceil(Math.log10(fmin))); d <= fmax * 1.0001; d *= 10) ticks.push(d); }
-  else for (let i = 0; i <= 10; i++) ticks.push(i * fmax / 10);
+  else for (let i = 0; i <= 10; i++) ticks.push(fmin + i * (fmax - fmin) / 10);
   ticks.forEach((f, i) => {
     const x = xf(f); g.strokeStyle = css('--grid'); g.beginPath(); g.moveTo(x + .5, T); g.lineTo(x + .5, T + ph); g.stroke();
     if (logx || i % 2 === 0) { const t = f ? fmtHz(f) : '0 Hz', w = g.measureText(t).width; g.fillStyle = css('--mut'); g.fillText(t, Math.max(L, Math.min(x - w / 2, W - R - w)), H - 8); }
@@ -1108,7 +1116,7 @@ function drawSpectrum(g, W, H) {
     }
     g.stroke();
     if ($('smark').value === '1') {
-      const pk = peakOf(P, Math.floor((logx ? fmin : 0) / df), Math.floor(fmax / df), df); peaks[c] = pk;
+      const pk = peakOf(P, Math.floor(fmin / df), Math.floor(fmax / df), df); peaks[c] = pk;
       if (pk) { const x = xf(pk.f), y = yd(pk.db); g.fillStyle = css(c ? '--c2' : '--c1'); g.beginPath(); g.moveTo(x, y - 3); g.lineTo(x - 5, y - 12); g.lineTo(x + 5, y - 12); g.fill(); }
     }
   }
@@ -1118,7 +1126,7 @@ function drawSpectrum(g, W, H) {
     const pk = peaks[c]; $(id).textContent = pk ? `peak ${fmtHz(pk.f)}  ${pk.db.toFixed(2)} dBV  (${(Math.SQRT2 * Math.pow(10, pk.db / 20)).toPrecision(4)} V peak)` : $('smark').value === '1' ? '–' : 'marker off';
   }
   const wv = windowOf($('swin').value), mode = $('strace').value;
-  $('sinfo').textContent = `Spectrum ${logx ? fmtHz(fmin) : '0 Hz'}–${fmtHz(fmax)}${logx ? ' (log)' : ''}, ${WINDOWS[$('swin').value].name}, bin ${fmtHz(df)}, RBW ${fmtHz(df * wv.enbw)}, `
+  $('sinfo').textContent = `Spectrum ${fmin ? fmtHz(fmin) : '0 Hz'}–${fmtHz(fmax)}${logx ? ' (log)' : ''}${fmin && !logx ? ` (centre ${fmtHz((fmin + fmax) / 2)})` : ''}, ${WINDOWS[$('swin').value].name}, bin ${fmtHz(df)}, RBW ${fmtHz(df * wv.enbw)}, `
     + (mode === 'live' ? 'live' : mode === 'max' ? `max hold (${spec.n})` : `average ${spec.n}/${$('sN').value}`) + `, ${(1 / dt / 1e6).toPrecision(3)} MS/s`
     + (last.vec ? `, vector ${last.vec}` : '');
   last.peaks = peaks;
@@ -1394,7 +1402,10 @@ const TILES = [
   { id: 't-sN', label: 'Spectrum avg', kind: 'var', input: 'sN', scale: 'list' },
   { id: 't-sref', unit: 'dBV', label: 'Ref level', kind: 'var', input: 'sref', scale: 'lin', min: -100, max: 30, step: 1, fmt: v => v.toFixed(0) + ' dBV' },
   { id: 't-sdiv', label: 'dB / div', kind: 'var', input: 'sdiv', scale: 'list' },
-  { id: 't-fmax', unit: 'Hz', label: 'Span (top)', kind: 'var', input: 'fmax', scale: 'log', min: 10, max: 5e7, fmt: v => fmtHz(Math.min(v, last ? 0.5 / last.dt : v)) },
+  { id: 't-fmax', unit: 'Hz', label: 'Span', kind: 'var', input: 'fmax', scale: 'log', min: 10, max: 5e7, fmt: v => fmtHz(Math.min(v, last ? 0.5 / last.dt : v)) },
+  { id: 't-fcen', unit: 'Hz', label: 'Centre', kind: 'var', input: 'fcen', scale: 'lin',
+    range: () => [0, last ? 0.5 / last.dt : 5e7], step: () => Math.max(1, Number($('fmax').value) / 10),   // ± moves a tenth of the span
+    fmt: v => { const [lo, hi] = specBand(last ? 0.5 / last.dt : 5e7); return lo === 0 && v < (hi - lo) / 2 ? 'from 0 Hz' : fmtHz((lo + hi) / 2); } },
   { id: 't-flog', label: 'Freq axis', kind: 'cycle', input: 'flog' },
   { id: 't-smark', label: 'Peak marker', kind: 'cycle', input: 'smark', val: () => $('smark').value === '1' ? (last && last.peaks && (last.peaks[1] || last.peaks[0]) ? fmtHz((last.peaks[1] || last.peaks[0]).f) : 'on') : 'off' },
   { id: 't-sreset', label: 'Restart trace', kind: 'act', val: () => spec.n ? `${spec.n} so far` : '–', click: () => { specReset(); log('spectrum trace restarted'); } },
@@ -1459,8 +1470,9 @@ const HELP = {
   't-sN': 'How many captures the spectrum average uses, 2 to 128.',
   't-sref': 'Level at the top of the screen, in dBV (0 dBV = 1 V rms). A 1 V-peak sine reads −3.0 dBV.',
   't-sdiv': 'dB per division (10 divisions).',
-  't-fmax': 'Highest frequency shown. Limited to half the sample rate: raise the scope sample rate for wider spans, lower it for finer bins (bin = rate / 8192).',
-  't-flog': 'Linear or logarithmic frequency axis (log starts about five decades below the top).',
+  't-fmax': 'Width of the frequency band shown, around Centre. Limited to half the sample rate: raise the scope sample rate for wider spans, lower it for finer bins (bin = rate / 8192).',
+  't-fcen': 'Centre of the band shown; the −/+ buttons move it by a tenth of the span. The band is kept between 0 Hz and half the sample rate, so 0 (or anything below half the span) shows the band from 0 Hz. To look closely at a tone, set Centre to its frequency and narrow Span.',
+  't-flog': 'Linear or logarithmic frequency axis (log shows the same band, starting at most five decades below its top).',
   't-smark': 'Peak marker on the highest bin of each shown channel, interpolated between bins; the readout gives its frequency and level.',
   't-sreset': 'Clear the averaged or max-hold trace and start again.',
   't-slobes': 'Sinc shape: zero crossings on each side of the central peak (1 to 100). A repeating sinc has a flat comb spectrum: equal lines at multiples of the frequency up to about lobes × frequency, then a sharp cut-off; handy for a one-shot frequency response.',
@@ -1669,7 +1681,7 @@ document.addEventListener('change', () => { if (selTile) sliderSetup(); renderTi
 document.addEventListener('input', e => { if (e.target.id !== 'slider') renderTiles(); });
 setInterval(renderTiles, 500);                     // running state, captures and monitor text change underneath
 // remember control settings across reloads (per browser; storage may be unavailable)
-const KEEP = ['rate', 'slobes', 'sorder', 'view', 'swin', 'strace', 'sN', 'sref', 'sdiv', 'fmax', 'flog', 'smark', 'vis1', 'vis2', 'avgon', 'avgN', 'r1', 'r2', 'vdiv1', 'vdiv2', 'off1', 'off2', 'tsrc', 'tedge', 'tlev', 'shape', 'freq', 'a1', 'a2', 'ph', 'vp', 'vm', 'lrate', 'lch', 'ltrig', 'lmask', 'lval', 'ledge', 'lpol', 'lzoom', 'pgmask', 'pgrate', 'dout', 'doe'];
+const KEEP = ['rate', 'slobes', 'sorder', 'view', 'swin', 'strace', 'sN', 'sref', 'sdiv', 'fmax', 'fcen', 'flog', 'smark', 'vis1', 'vis2', 'avgon', 'avgN', 'r1', 'r2', 'vdiv1', 'vdiv2', 'off1', 'off2', 'tsrc', 'tedge', 'tlev', 'shape', 'freq', 'a1', 'a2', 'ph', 'vp', 'vm', 'lrate', 'lch', 'ltrig', 'lmask', 'lval', 'ledge', 'lpol', 'lzoom', 'pgmask', 'pgrate', 'dout', 'doe'];
 try { const st = JSON.parse(localStorage.getItem('ad2-controls') || '{}'); for (const id of KEEP) if (id in st) $(id).value = st[id]; } catch {}
 for (const id of KEEP) $(id).addEventListener('change', () => {
   try { const st = {}; for (const k of KEEP) st[k] = $(k).value; localStorage.setItem('ad2-controls', JSON.stringify(st)); } catch {}

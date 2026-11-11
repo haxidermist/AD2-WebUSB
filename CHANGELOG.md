@@ -9,6 +9,9 @@ Notable changes to the app (`ad2.html`) and its FPGA design (`hdl/`), newest fir
   detector, used by the logic analyser, can now also trigger the scope (cross-trigger source 5); a DIO trigger
   lands about 10 ns late relative to the analog data.
 - README feature overview updated: trigger sources and update rate.
+- **Spectrum centre frequency:** a Centre control next to Span. The band shown is centre ± span/2, kept within
+  0 Hz and half the sample rate; the −/+ buttons move it by a tenth of the span. Centre 0 shows the band from
+  0 Hz as before.
 
 ## 2026-11-10
 
