@@ -8,6 +8,7 @@ Notable changes to the app (`ad2.html`) and its FPGA design (`hdl/`), newest fir
   whatever their shape or level) and DIO 0-15 (a rising or falling edge on that pin). The FPGA's DIO edge
   detector, used by the logic analyser, can now also trigger the scope (cross-trigger source 5); a DIO trigger
   lands about 10 ns late relative to the analog data.
+- README feature overview updated: trigger sources and update rate.
 
 ## 2026-11-10
 

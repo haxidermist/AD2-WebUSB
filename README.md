@@ -78,11 +78,12 @@ changes nothing permanently. Other platforms do not need it.
 
 **A bench instrument in a browser tab.** Plug in the board, click Connect, and within a couple of seconds you
 have a two-channel 100 MS/s oscilloscope, a spectrum analyser, a two-channel waveform generator, programmable
-power supplies and a 16-channel logic analyser with a pattern generator. Everything runs locally on your
-machine: the page talks straight to the board over USB, nothing is sent anywhere, and it keeps working offline.
+power supplies and a 16-channel logic analyser with a pattern generator. The display updates dozens of times
+a second. Everything runs locally on your machine: the page talks straight to the board over USB, nothing is sent anywhere, and it keeps working offline.
 
 **Real instrument behaviour, not a toy.** Readings use the calibration stored in your board's own EEPROM. The
-scope triggers on every 100 MS/s sample, picks the hardware input range for you as you change volts per
+scope checks its trigger on every 100 MS/s sample, on a CH1 or CH2 level, on the start of each generator
+period, or on an edge of any DIO pin. It picks the hardware input range for you as you change volts per
 division, and flags clipping. Averaging is aligned to the trigger, so repetitive signals clean up instead of
 smearing. The spectrum view is a calibrated 8192-point FFT in dBV with a choice of windows, averaging,
 max-hold and an interpolated peak marker. It runs free at full speed, or, with a trigger and Average on,
@@ -98,7 +99,7 @@ W2 against W1 change live while it plays.
 
 **Digital in and out.** The logic analyser captures all 16 DIO pins at up to 100 MS/s with a pattern-and-edge
 trigger and zoom. The same pins can be driven as static outputs or play a counter pattern, which is also a
-quick way to check the analyser.
+quick way to check the analyser, and any of them can trigger the oscilloscope.
 
 ![Logic analyser: the counter pattern on DIO 0–7 at 1 M words/s, captured at 10 MS/s and zoomed 8×](screenshots/logic.png)
 
