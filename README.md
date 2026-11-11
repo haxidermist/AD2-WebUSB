@@ -18,10 +18,11 @@ trademark of Digilent.
 1. Plug in the Analog Discovery 2.
    *Windows, once:* give the board the WinUSB driver, with Zadig or Device Manager (see below).
    *Linux:* download `detach.py` and run `python3 detach.py` once after plugging in (see below).
+   *macOS:* nothing to do.
 2. Open the [hosted app](https://haxidermist.github.io/AD2-WebUSB/ad2.html) in Chrome or another Chromium browser.
    It also works offline: download `ad2.html` and double-click it.
    The small date next to the name in the top bar is the page's build. If it is older than the latest entry
-   in the [change log](CHANGELOG.md), your browser is showing a cached copy: reload with Ctrl+Shift+R.
+   in the [change log](CHANGELOG.md), your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).
 3. Click **Connect** and choose "Digilent USB Device".
 
 The page loads its FPGA design if the board is blank, initialises the clocks and converters, reads the board's
@@ -70,7 +71,8 @@ changes nothing permanently. Other platforms do not need it.
 
 - **Linux:** fully tested.
 - **Windows:** connects once the board has the WinUSB driver (Zadig, above).
-- **macOS, ChromeOS:** not tried yet. Reports are welcome.
+- **macOS:** works out of the box, no driver change or helper needed (confirmed on an Apple M4 Mac).
+- **ChromeOS:** not tried yet. Reports are welcome.
 
 ## What it does
 
