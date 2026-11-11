@@ -129,6 +129,10 @@
   .card { background: var(--plot); border: 2px solid var(--frame); border-radius: 6px; }
   canvas { background: var(--plot); }
   .chips, .chip, #sinfo, #linfo { font-family: var(--mono); font-size: 13px; }
+  .mtab { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 2px 18px; margin-top: 8px;
+          font: 13px var(--mono); color: var(--mut); }
+  .mtab .sel { color: var(--fg); font-weight: 700; }
+  #cv.spec { cursor: crosshair; }
   .chip b { font-family: var(--cond); font-size: 15px; }
   pre#log { color: var(--mut); font-family: var(--mono); }
   /* control panel */
@@ -183,7 +187,7 @@
 </aside>
 
 <header class="topbar">
-  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 03:13 UTC</span></b>
+  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 04:06 UTC</span></b>
   <span class="leds"><span class="led g" id="l_link" title="link"></span><span class="led y" id="l_trig" title="trigger"></span><span class="led r" id="l_ovr" title="ADC clipped"></span></span>
   <button id="connect" class="primary" data-help="Connect to the Analog Discovery 2 over WebUSB. The first time, Chrome asks you to pick “Digilent USB Device”. Close WaveForms and any cap run first: only one program can hold the board. On Windows the board needs the WinUSB driver (install it once with Zadig, see the README); on Linux run detach.py after plugging it in.">Connect</button>
   <button id="disconnect" disabled data-help="Release the board so WaveForms or cap can use it. Outputs keep their last state.">Disconnect</button>
@@ -213,6 +217,7 @@
       <div class="chip"><span class="sw" style="background:var(--c2)"></span><b>CH2</b><span id="s2" class="muted">–</span></div>
       <div class="chip muted" id="sinfo"></div>
     </div>
+    <div id="mtab" class="mtab" hidden></div>
   </div>
   <div class="card">
     <canvas id="lcv" style="height:420px"></canvas>
@@ -1138,6 +1143,7 @@ function drawSpectrum(g, W, H) {
   const xf = f => L + (logx ? Math.log(Math.max(f, fmin) / fmin) / Math.log(fmax / fmin) : (f - fmin) / (fmax - fmin)) * pw;
   const fx = x => logx ? fmin * Math.pow(fmax / fmin, (x - L) / pw) : fmin + (x - L) / pw * (fmax - fmin);
   const yd = d => T + (ref - d) / (10 * per) * ph;
+  mk.geo = { L, T, pw, ph, xf, fx, yd, df, fmin, fmax };   // for the marker mouse handling
   g.font = '11px ' + (css('--mono') || 'monospace'); g.lineWidth = 1;
   for (let i = 0; i <= 10; i++) {                    // level grid
     const y = T + i * ph / 10; g.strokeStyle = css('--grid'); g.beginPath(); g.moveTo(L, y + .5); g.lineTo(L + pw, y + .5); g.stroke();
@@ -1169,7 +1175,9 @@ function drawSpectrum(g, W, H) {
       if (pk) { const x = xf(pk.f), y = yd(pk.db); g.fillStyle = css(c ? '--c2' : '--c1'); g.beginPath(); g.moveTo(x, y - 3); g.lineTo(x - 5, y - 12); g.lineTo(x + 5, y - 12); g.fill(); }
     }
   }
+  mkDraw(g);
   g.restore();
+  mkTable();
   for (const [c, id] of [[0, 's1'], [1, 's2']]) {
     if (!shown[c]) { $(id).textContent = 'hidden'; continue; }
     const pk = peaks[c]; $(id).textContent = pk ? `peak ${fmtHz(pk.f)}  ${pk.db.toFixed(2)} dBV  (${(Math.SQRT2 * Math.pow(10, pk.db / 20)).toPrecision(4)} V peak)` : $('smark').value === '1' ? '–' : 'marker off';
@@ -1179,6 +1187,112 @@ function drawSpectrum(g, W, H) {
     + (mode === 'live' ? 'live' : mode === 'max' ? `max hold (${spec.n})` : `average ${spec.n}/${$('sN').value}`) + `, ${(1 / dt / 1e6).toPrecision(3)} MS/s`
     + (last.vec ? `, vector ${last.vec}` : '');
   last.peaks = peaks;
+}
+// ---------- spectrum markers ----------
+// Up to 8 markers, each reading CH1 or CH2. On the spectrum: click adds a marker (or selects the one under the
+// pointer) on the nearer trace, drag moves it, right-click deletes it. Peak hopping moves the selected marker to the
+// highest peak in the band or to the next peak left / right (a local maximum 6 dB above the level 90 % of the band's
+// bins stay below, that also rises 6 dB above its surroundings); keys: ← → hop, Home highest peak, 1-8 select, Delete remove. Levels come from the bin under the marker.
+const MK_MAX = 8;
+const mk = { list: [], sel: -1, geo: null, drag: false };   // list entries: { f: Hz, ch: 0 | 1 }
+const mkBin = f => Math.round(f / mk.geo.df);
+const mkLevel = m => { const P = spec.p[m.ch]; const k = mkBin(m.f); return P && k >= 0 && k < P.length ? dBV(P[k]) : NaN; };
+function mkPeaks(ch) {                               // bins of the peaks inside the band
+  const P = spec.p[ch], G = mk.geo; if (!P || !G) return [];
+  const k0 = Math.max(2, Math.ceil(G.fmin / G.df)), k1 = Math.min(P.length - 2, Math.floor(G.fmax / G.df));
+  const lv = []; for (let k = k0; k <= k1; k++) lv.push(P[k]); lv.sort((a, b) => a - b);
+  const top = lv.length ? dBV(lv[Math.floor(lv.length * 0.9)]) : -Infinity, out = [];   // top of the noise (90 % of bins)
+  for (let k = k0; k <= k1; k++) {
+    if (!(P[k] >= P[k - 1] && P[k] > P[k + 1]) || dBV(P[k]) < top + 6) continue;
+    // prominence: it must rise 6 dB above the lowest point between it and the next higher level on each side
+    let lo = P[k], ro = P[k];
+    for (let j = k - 1; j >= k0 && P[j] <= P[k]; j--) lo = Math.min(lo, P[j]);
+    for (let j = k + 1; j <= k1 && P[j] <= P[k]; j++) ro = Math.min(ro, P[j]);
+    if (dBV(P[k]) - dBV(Math.max(lo, ro)) >= 6) out.push(k);
+  }
+  return out;
+}
+function mkRefine(ch, k) {                           // frequency of the peak at bin k, refined by a parabola in dB
+  const P = spec.p[ch], a = dBV(P[k - 1]), b = dBV(P[k]), c = dBV(P[k + 1]), den = a - 2 * b + c;
+  return (k + (den ? 0.5 * (a - c) / den : 0)) * mk.geo.df;
+}
+function mkSnap(x, ch) {                             // highest bin under the pixels around x (as the trace is drawn)
+  const G = mk.geo, P = spec.p[ch];
+  let k0 = Math.max(1, Math.floor(G.fx(x - 3) / G.df)), k1 = Math.min(P.length - 1, Math.max(k0, Math.floor(G.fx(x + 4) / G.df))), kb = k0;
+  for (let k = k0; k <= k1; k++) if (P[k] > P[kb]) kb = k;
+  return kb * G.df;
+}
+function mkHop(dir) {                                // dir 0: highest peak, -1 / +1: next peak below / above
+  if (!spec.n || !mk.geo) return;
+  if (mk.sel < 0) { if (mk.list.length >= MK_MAX) return; mk.list.push({ f: 0, ch: $('vis1').value === '1' ? 0 : 1 }); mk.sel = mk.list.length - 1; }
+  const m = mk.list[mk.sel], pk = mkPeaks(m.ch), P = spec.p[m.ch], here = m.f / mk.geo.df;
+  let k = null;
+  if (dir === 0) { for (const q of pk) if (k === null || P[q] > P[k]) k = q; }
+  else if (dir < 0) { for (const q of pk) if (q < here - 0.5) k = q; }
+  else { for (const q of pk) if (q > here + 0.5) { k = q; break; } }
+  if (k !== null) m.f = mkRefine(m.ch, k);
+  draw(); renderTiles();
+}
+function mkDelete(i = mk.sel) { if (i < 0) return; mk.list.splice(i, 1); mk.sel = Math.min(mk.sel, mk.list.length - 1); draw(); renderTiles(); }
+function mkDraw(g) {
+  const G = mk.geo;
+  mk.list.forEach((m, i) => {
+    const lv = mkLevel(m); if (isNaN(lv) || m.f < G.fmin || m.f > G.fmax) return;
+    const x = G.xf(m.f), y = Math.max(G.T + 14, G.yd(lv)), sel = i === mk.sel;
+    g.fillStyle = css(m.ch ? '--c2' : '--c1'); g.strokeStyle = css('--fg'); g.lineWidth = sel ? 2 : 1;
+    g.beginPath(); g.moveTo(x, y - 2); g.lineTo(x - 6, y - 13); g.lineTo(x + 6, y - 13); g.closePath(); g.fill(); if (sel) g.stroke();
+    g.fillStyle = css('--fg'); g.font = (sel ? 'bold ' : '') + '11px ' + (css('--mono') || 'monospace');
+    g.fillText(String(i + 1), x - 3, y - 16);
+  });
+}
+function mkTable() {
+  const t = $('mtab'); t.hidden = !mk.list.length || $('view').value !== 'spec'; if (t.hidden) return;
+  const r = mk.list[0], rl = mkLevel(r);
+  t.innerHTML = mk.list.map((m, i) => {
+    const lv = mkLevel(m), head = `M${i + 1} ${m.ch ? 'CH2' : 'CH1'} ${fcFormat(m.f, mk.geo.df / 10 / Math.max(m.f, mk.geo.df))}  ${isNaN(lv) ? '–' : lv.toFixed(2) + ' dBV'}`;
+    const d = i ? `  Δ ${m.f >= r.f ? '+' : '−'}${fmtHz(Math.abs(m.f - r.f))} ${isNaN(lv - rl) ? '' : (lv - rl >= 0 ? '+' : '') + (lv - rl).toFixed(2) + ' dB'}` : '';
+    return `<div${i === mk.sel ? ' class="sel"' : ''}>${head}${d}</div>`;
+  }).join('');
+}
+{                                                    // mouse on the spectrum
+  const cv = $('cv'), pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  const inPlot = (x, y) => mk.geo && x >= mk.geo.L && x <= mk.geo.L + mk.geo.pw && y >= mk.geo.T && y <= mk.geo.T + mk.geo.ph;
+  const hit = x => { let best = -1, bd = 9; mk.list.forEach((m, i) => { const d = Math.abs(mk.geo.xf(m.f) - x); if (d < bd) { bd = d; best = i; } }); return best; };
+  cv.addEventListener('pointerdown', e => {
+    if ($('view').value !== 'spec' || e.button !== 0 || !spec.n) return;
+    const [x, y] = pos(e); if (!inPlot(x, y)) return;
+    let i = hit(x);
+    if (i < 0) {
+      if (mk.list.length >= MK_MAX) { log(`spectrum: at most ${MK_MAX} markers`); return; }
+      const shown = [0, 1].filter(c => $(c ? 'vis2' : 'vis1').value === '1'); if (!shown.length) return;
+      // on the trace nearer to the pointer
+      const ch = shown.reduce((b, c) => { const d = Math.abs(mk.geo.yd(dBV(spec.p[c][mkBin(mkSnap(x, c))])) - y); return d < b[1] ? [c, d] : b; }, [shown[0], Infinity])[0];
+      mk.list.push({ f: mkSnap(x, ch), ch }); i = mk.list.length - 1;
+    }
+    mk.sel = i; mk.drag = true; try { cv.setPointerCapture(e.pointerId); } catch { } draw(); renderTiles();
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!mk.drag || mk.sel < 0) return;
+    const [x] = pos(e), m = mk.list[mk.sel];
+    m.f = mkSnap(Math.max(mk.geo.L, Math.min(mk.geo.L + mk.geo.pw, x)), m.ch); draw();
+  });
+  cv.addEventListener('pointerup', () => { if (mk.drag) { mk.drag = false; renderTiles(); } });
+  cv.addEventListener('contextmenu', e => {
+    if ($('view').value !== 'spec') return;
+    const [x] = pos(e), i = mk.geo ? hit(x) : -1; if (i >= 0) { e.preventDefault(); mkDelete(i); }
+  });
+  document.addEventListener('keydown', e => {
+    if ($('view').value !== 'spec' || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+    const k = e.key;
+    if (k === 'ArrowLeft' || k === 'ArrowRight') mkHop(k === 'ArrowLeft' ? -1 : 1);
+    else if (k === 'Home') mkHop(0);
+    else if (k === 'Delete' || k === 'Backspace') mkDelete();
+    else if (/^[1-8]$/.test(k) && Number(k) <= mk.list.length) { mk.sel = Number(k) - 1; draw(); renderTiles(); }
+    else return;
+    e.preventDefault();
+  });
+  $('view').addEventListener('change', () => cv.classList.toggle('spec', $('view').value === 'spec'));
+  cv.classList.toggle('spec', $('view').value === 'spec');
 }
 function draw() {
   const cv = $('cv'), dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
@@ -1504,6 +1618,15 @@ const TILES = [
   { id: 't-flog', label: 'Freq axis', kind: 'cycle', input: 'flog' },
   { id: 't-smark', label: 'Peak marker', kind: 'cycle', input: 'smark', val: () => $('smark').value === '1' ? (last && last.peaks && (last.peaks[1] || last.peaks[0]) ? fmtHz((last.peaks[1] || last.peaks[0]).f) : 'on') : 'off' },
   { id: 't-sreset', label: 'Restart trace', kind: 'act', val: () => spec.n ? `${spec.n} so far` : '–', click: () => { specReset(); log('spectrum trace restarted'); } },
+  { id: 't-mk', label: 'Markers', kind: 'act', val: () => mk.list.length ? `${mk.list.length}/${MK_MAX} · M${mk.sel + 1} selected` : 'click the spectrum',
+    click: () => { if (mk.list.length) { mk.sel = (mk.sel + 1) % mk.list.length; draw(); } } },
+  { id: 't-mkpk', label: 'Peak', kind: 'act', val: () => 'highest', click: () => mkHop(0) },
+  { id: 't-mkl', label: '◀ Peak', kind: 'act', val: () => 'next lower', click: () => mkHop(-1) },
+  { id: 't-mkr', label: 'Peak ▶', kind: 'act', val: () => 'next higher', click: () => mkHop(1) },
+  { id: 't-mkch', label: 'Marker trace', kind: 'act', val: () => mk.sel >= 0 ? (mk.list[mk.sel].ch ? 'CH2' : 'CH1') : '–',
+    click: () => { if (mk.sel >= 0) { mk.list[mk.sel].ch ^= 1; draw(); } } },
+  { id: 't-mkdel', label: 'Delete marker', kind: 'act', val: () => mk.sel >= 0 ? 'M' + (mk.sel + 1) : '–', click: () => mkDelete() },
+  { id: 't-mkclr', label: 'Clear markers', kind: 'act', val: () => mk.list.length ? String(mk.list.length) : '–', click: () => { mk.list = []; mk.sel = -1; draw(); } },
   { g: 'Waveform generator' },
   { id: 't-awg', label: 'AWG', kind: 'toggle', val: () => awgIsOn() ? 'on' : 'off', on: awgIsOn, click: () => awgIsOn() ? awgOff() : awgApply() },
   { id: 't-shape', label: 'Shape', kind: 'cycle', input: 'shape', live: liveAwg },
@@ -1577,6 +1700,13 @@ const HELP = {
   't-sdiv': 'dB per division (10 divisions).',
   't-fmax': 'Width of the frequency band shown, around Centre. Limited to half the sample rate: raise the scope sample rate for wider spans, lower it for finer bins (bin = rate / 8192).',
   't-fcen': 'Centre of the band shown; the −/+ buttons move it by a tenth of the span. The band is kept between 0 Hz and half the sample rate, so 0 (or anything below half the span) shows the band from 0 Hz. To look closely at a tone, set Centre to its frequency and narrow Span.',
+  't-mk': 'Spectrum markers (up to 8). Click the spectrum to add one on the nearer trace, or click a marker to select it; drag to move it, right-click to delete it. Clicking this tile selects the next marker; keys 1-8 select directly. The table under the plot lists each marker, and for markers 2-8 the difference to marker 1.',
+  't-mkpk': 'Move the selected marker to the highest peak in the band shown (adds a marker if none is selected). Key: Home.',
+  't-mkl': 'Move the selected marker to the next peak at a lower frequency: a local maximum at least 6 dB above the top of the noise (the level 90 % of the band stays below) that also rises 6 dB above its surroundings, so noise bumps and window skirts are skipped. Key: ←.',
+  't-mkr': 'Move the selected marker to the next peak at a higher frequency. Key: →.',
+  't-mkch': 'Which trace the selected marker reads: CH1 or CH2.',
+  't-mkdel': 'Delete the selected marker. Key: Delete.',
+  't-mkclr': 'Remove all markers.',
   't-fcon': 'Frequency counter on or off. The FPGA counts whole input periods and times them with the 100 MHz sample clock (reciprocal counting), back to back with no dead time, so the resolution is the same at any frequency: about 10 ns per gate for DIO, and far finer for CH1/CH2, where the crossing times are interpolated between ADC samples. Works alongside the scope.',
   't-fcsrc': 'What to count: CH1 or CH2 (rising crossings of Level, with 20 mV hysteresis, on the channel’s input range) or a DIO pin (rising edges, up to about 50 MHz).',
   't-fclev': 'Crossing level for CH1/CH2, in volts. Put it where the signal is steepest, usually near its middle.',
