@@ -187,7 +187,7 @@
 </aside>
 
 <header class="topbar">
-  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 04:30 UTC</span></b>
+  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 04:36 UTC</span></b>
   <span class="leds"><span class="led g" id="l_link" title="link"></span><span class="led y" id="l_trig" title="trigger"></span><span class="led r" id="l_ovr" title="ADC clipped"></span></span>
   <button id="connect" class="primary" data-help="Connect to the Analog Discovery 2 over WebUSB. The first time, Chrome asks you to pick “Digilent USB Device”. Close WaveForms and any cap run first: only one program can hold the board. On Windows the board needs the WinUSB driver (install it once with Zadig, see the README); on Linux run detach.py after plugging it in.">Connect</button>
   <button id="disconnect" disabled data-help="Release the board so WaveForms or cap can use it. Outputs keep their last state.">Disconnect</button>
@@ -1202,7 +1202,7 @@ function drawSpectrum(g, W, H) {
 // surroundings, so noise bumps and window skirts are skipped. Levels come from the bin under the marker.
 const MK_N = 8, MK_MODES = ['live', 'max hold', 'min hold', 'average'];
 const mk = { m: Array.from({ length: MK_N }, () => ({ on: false, f: 0, ch: 0, mode: 0, track: false, p: NaN, n: 0 })),
-             sel: 0, geo: null, drag: false };
+             sel: 0, geo: null, drag: false, pend: null, zoom: [] };   // pend: a press on empty spectrum; zoom: earlier bands
 const mkCur = () => mk.m[mk.sel];
 const mkBin = f => Math.round(f / mk.geo.df);
 const mkPow = m => { const P = spec.p[m.ch]; if (!P || !mk.geo) return NaN; const k = mkBin(m.f); return k >= 0 && k < P.length ? P[k] : NaN; };
@@ -1265,6 +1265,13 @@ function mkUpdate() {                                // after each new spectrum:
 }
 function mkDraw(g) {
   const G = mk.geo;
+  if (mk.pend && mk.pend.band) {                     // the band being selected for zooming
+    const a = Math.min(mk.pend.x0, mk.pend.x1), b = Math.max(mk.pend.x0, mk.pend.x1);
+    g.fillStyle = css('--fg'); g.globalAlpha = 0.12; g.fillRect(a, G.T, b - a, G.ph); g.globalAlpha = 1;
+    g.strokeStyle = css('--fg'); g.setLineDash([3, 3]); g.strokeRect(a + .5, G.T + .5, b - a, G.ph - 1); g.setLineDash([]);
+    g.fillStyle = css('--fg'); g.font = '11px ' + (css('--mono') || 'monospace');
+    g.fillText(`${fmtHz(G.fx(a))} – ${fmtHz(G.fx(b))}`, a + 4, G.T + 14);
+  }
   mk.m.forEach((m, i) => {
     if (!m.on) return; const lv = mkLevel(m); if (isNaN(lv) || m.f < G.fmin || m.f > G.fmax) return;
     const x = G.xf(m.f), y = Math.max(G.T + 14, G.yd(lv)), sel = i === mk.sel;
@@ -1286,6 +1293,18 @@ function mkTable() {
     return `<div${i === mk.sel ? ' class="sel"' : ''}>${head}${d}</div>`;
   }).join('');
 }
+// zoom: a band selected by dragging sets Centre and Span; right-click on empty spectrum steps back
+function zoomTo(f0, f1) {
+  mk.zoom.push([$('fcen').value, $('fmax').value]);
+  const span = Math.max(f1 - f0, 8 * mk.geo.df);    // at least 8 bins
+  $('fmax').value = String(Math.round(span)); $('fcen').value = String(Math.round((f0 + f1) / 2)); fire('fmax'); fire('fcen');
+  log(`spectrum zoom: ${fmtHz(f0)} – ${fmtHz(f1)}`); renderTiles();
+}
+function zoomBack(full = false) {
+  const z = full ? null : mk.zoom.pop();
+  if (full) mk.zoom = [];
+  $('fcen').value = z ? z[0] : '0'; $('fmax').value = z ? z[1] : '50000000'; fire('fmax'); fire('fcen'); renderTiles();
+}
 {                                                    // mouse and keys on the spectrum
   const cv = $('cv'), pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const inPlot = (x, y) => mk.geo && x >= mk.geo.L && x <= mk.geo.L + mk.geo.pw && y >= mk.geo.T && y <= mk.geo.T + mk.geo.ph;
@@ -1293,24 +1312,43 @@ function mkTable() {
   cv.addEventListener('pointerdown', e => {
     if ($('view').value !== 'spec' || e.button !== 0 || !spec.n) return;
     const [x, y] = pos(e); if (!inPlot(x, y)) return;
-    let i = hit(x);
-    if (i < 0) {                                     // the next hidden marker, or the selected one when all are shown
-      const shown = [0, 1].filter(c => $(c ? 'vis2' : 'vis1').value === '1'); if (!shown.length) return;
-      const ch = shown.reduce((b, c) => { const d = Math.abs(mk.geo.yd(dBV(spec.p[c][mkBin(mkSnap(x, c))])) - y); return d < b[1] ? [c, d] : b; }, [shown[0], Infinity])[0];
-      i = mk.m.findIndex(m => !m.on); if (i < 0) i = mk.sel;
-      const m = mk.m[i]; m.on = true; m.ch = ch; m.track = false; m.f = mkSnap(x, ch); mkReset(m);
-    }
-    mk.sel = i; mk.drag = true; try { cv.setPointerCapture(e.pointerId); } catch { } draw(); renderTiles();
+    const i = hit(x);
+    try { cv.setPointerCapture(e.pointerId); } catch { }
+    if (i >= 0) { mk.sel = i; mk.drag = true; draw(); renderTiles(); return; }   // on a marker: select and drag it
+    mk.pend = { x0: x, y0: y, x1: x, band: false };    // empty spectrum: a click shows a marker, a drag selects a band
   });
+  const placeMarker = (x, y) => {                    // the next hidden marker, or the selected one when all are shown
+    const shown = [0, 1].filter(c => $(c ? 'vis2' : 'vis1').value === '1'); if (!shown.length) return;
+    const ch = shown.reduce((b, c) => { const d = Math.abs(mk.geo.yd(dBV(spec.p[c][mkBin(mkSnap(x, c))])) - y); return d < b[1] ? [c, d] : b; }, [shown[0], Infinity])[0];
+    let i = mk.m.findIndex(m => !m.on); if (i < 0) i = mk.sel;
+    const m = mk.m[i]; m.on = true; m.ch = ch; m.track = false; m.f = mkSnap(x, ch); mkReset(m);
+    mk.sel = i; draw(); renderTiles();
+  };
   cv.addEventListener('pointermove', e => {
+    if (mk.pend) {                                   // more than 5 px sideways: selecting a band to zoom into
+      const [x] = pos(e), p = mk.pend; p.x1 = Math.max(mk.geo.L, Math.min(mk.geo.L + mk.geo.pw, x));
+      if (Math.abs(p.x1 - p.x0) > 5) p.band = true;
+      if (p.band) draw();
+      return;
+    }
     if (!mk.drag) return;
     const [x] = pos(e), m = mkCur();
     m.track = false; m.f = mkSnap(Math.max(mk.geo.L, Math.min(mk.geo.L + mk.geo.pw, x)), m.ch); mkReset(m); draw();
   });
-  cv.addEventListener('pointerup', () => { if (mk.drag) { mk.drag = false; renderTiles(); } });
+  cv.addEventListener('pointerup', () => {
+    if (mk.pend) {
+      const p = mk.pend; mk.pend = null;
+      if (p.band) zoomTo(mk.geo.fx(Math.min(p.x0, p.x1)), mk.geo.fx(Math.max(p.x0, p.x1)));
+      else placeMarker(p.x0, p.y0);
+      return;
+    }
+    if (mk.drag) { mk.drag = false; renderTiles(); }
+  });
   cv.addEventListener('contextmenu', e => {
     if ($('view').value !== 'spec') return;
-    const [x] = pos(e), i = mk.geo ? hit(x) : -1; if (i >= 0) { e.preventDefault(); mk.sel = i; mkShow(false); }
+    const [x, y] = pos(e); if (!inPlot(x, y)) return;
+    e.preventDefault();
+    const i = hit(x); if (i >= 0) { mk.sel = i; mkShow(false); } else zoomBack();   // a marker: hide it; else zoom back
   });
   document.addEventListener('keydown', e => {
     if ($('view').value !== 'spec' || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
@@ -1651,6 +1689,7 @@ const TILES = [
   { id: 't-fcen', unit: 'Hz', label: 'Centre', kind: 'var', input: 'fcen', scale: 'lin',
     range: () => [0, last ? 0.5 / last.dt : 5e7], step: () => Math.max(1, Number($('fmax').value) / 10),   // ± moves a tenth of the span
     fmt: v => { const [lo, hi] = specBand(last ? 0.5 / last.dt : 5e7); return lo === 0 && v < (hi - lo) / 2 ? 'from 0 Hz' : fmtHz((lo + hi) / 2); } },
+  { id: 't-zoomfull', label: 'Full span', kind: 'act', val: () => mk.zoom.length ? `${mk.zoom.length} zoom step${mk.zoom.length > 1 ? 's' : ''}` : '–', click: () => zoomBack(true) },
   { id: 't-flog', label: 'Freq axis', kind: 'cycle', input: 'flog' },
   { id: 't-smark', label: 'Peak marker', kind: 'cycle', input: 'smark', val: () => $('smark').value === '1' ? (last && last.peaks && (last.peaks[1] || last.peaks[0]) ? fmtHz((last.peaks[1] || last.peaks[0]).f) : 'on') : 'off' },
   { id: 't-sreset', label: 'Restart trace', kind: 'act', val: () => spec.n ? `${spec.n} so far` : '–', click: () => { specReset(); log('spectrum trace restarted'); } },
@@ -1741,8 +1780,9 @@ const HELP = {
   't-sref': 'Level at the top of the screen, in dBV (0 dBV = 1 V rms). A 1 V-peak sine reads −3.0 dBV.',
   't-sdiv': 'dB per division (10 divisions).',
   't-fmax': 'Width of the frequency band shown, around Centre. Limited to half the sample rate: raise the scope sample rate for wider spans, lower it for finer bins (bin = rate / 8192).',
+  't-zoomfull': 'Back to the full band (0 Hz to half the sample rate). To zoom in, drag across the spectrum: the selected block becomes the new band. Right-click on empty spectrum steps back one zoom.',
   't-fcen': 'Centre of the band shown; the −/+ buttons move it by a tenth of the span. The band is kept between 0 Hz and half the sample rate, so 0 (or anything below half the span) shows the band from 0 Hz. To look closely at a tone, set Centre to its frequency and narrow Span.',
-  't-mk': 'Selects the marker the controls below act on: click to step through M1-M8 (keys 1-8 select directly). On the spectrum, click a marker to select it, or click elsewhere to show the next hidden marker there; drag to move, right-click to hide. The table under the plot lists the shown markers, with differences to the lowest-numbered one.',
+  't-mk': 'Selects the marker the controls below act on: click to step through M1-M8 (keys 1-8 select directly). On the spectrum, click a marker to select it, or click elsewhere to show the next hidden marker there; drag a marker to move it, right-click it to hide it. Dragging across empty spectrum zooms into that band instead; right-click on empty spectrum zooms back. The table under the plot lists the shown markers, with differences to the lowest-numbered one.',
   't-mkon': 'Show or hide the selected marker. Shown for the first time, it goes to the highest peak. Key: Delete hides it.',
   't-mkch': 'Which trace the selected marker reads: CH1 or CH2.',
   't-mkpk': 'Move the selected marker to the highest peak in the band shown. Key: Home.',
