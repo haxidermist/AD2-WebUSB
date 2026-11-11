@@ -9,6 +9,10 @@ Notable changes to the app (`ad2.html`) and its FPGA design (`hdl/`), newest fir
   detector, used by the logic analyser, can now also trigger the scope (cross-trigger source 5); a DIO trigger
   lands about 10 ns late relative to the analog data.
 - README feature overview updated: trigger sources and update rate.
+- **Spectrum markers, slots:** markers are now eight slots, M1-M8. The marker controls act on the selected
+  one (step through with the Marker tile or keys 1-8): show / hide, trace, peak hopping, Track peak (follows
+  the highest peak each capture) and Reading: live, max hold, min hold or average over captures, independent
+  of the trace mode. Clicking empty spectrum shows the next hidden marker; right-click hides one.
 - **Spectrum markers:** up to 8, each on CH1 or CH2. Click the spectrum to add or select one, drag to move it,
   right-click to delete it. Peak hopping (Peak, ◀ Peak, Peak ▶ tiles; Home, ←, → keys) jumps between real
   peaks, skipping noise and window skirts, and refines each to the peak's exact frequency. A table under the

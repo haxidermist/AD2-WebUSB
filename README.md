@@ -88,9 +88,9 @@ division, and flags clipping. Averaging is aligned to the trigger, so repetitive
 smearing. The spectrum view is a calibrated 8192-point FFT in dBV with a choice of windows, averaging,
 max-hold and an interpolated peak marker. It runs free at full speed, or, with a trigger and Average on,
 shows the spectrum of the trigger-aligned average (vector averaging): the noise floor drops by about 3 dB
-per doubling of the count, which brings out small harmonics that power averaging leaves buried. Up to eight
-markers can be clicked onto the spectrum, dragged, or hopped from peak to peak with the arrow keys, with
-frequency and level differences to the first marker.
+per doubling of the count, which brings out small harmonics that power averaging leaves buried. Eight markers
+can be clicked onto the spectrum, dragged, hopped from peak to peak or set to track the highest peak, and each
+can read live, max hold, min hold or an average, with frequency and level differences between them.
 
 ![Spectrum analyser: a 20-lobe sinc from the generator at 2 kHz, showing its flat comb of harmonics to 40 kHz](screenshots/spectrum.png)
 
@@ -122,7 +122,7 @@ The screenshots are of the app running on a real board, with W1 looped back to C
 | Instrument | Details |
 |---|---|
 | Oscilloscope | 2 channels, 14-bit, 10 kS/s to 100 MS/s, 8192 samples. 1 mV/div to 5 V/div with offset; the two hardware input ranges (±2.7 V and ±25 V) are picked automatically. Trigger on a CH1 or CH2 level crossing, on the start of each waveform-generator period, or on an edge of any DIO pin, with auto timeout. Trigger-aligned averaging. |
-| Spectrum analyser | 8192-point FFT of both channels in dBV. Blackman-Harris, Hann, flat-top or rectangular window; live, averaged or max-hold trace; vector averaging of trigger-aligned waveforms; centre frequency and span, linear or log axis; peak marker; up to 8 markers (click, drag, peak hopping) with Δ to marker 1. |
+| Spectrum analyser | 8192-point FFT of both channels in dBV. Blackman-Harris, Hann, flat-top or rectangular window; live, averaged or max-hold trace; vector averaging of trigger-aligned waveforms; centre frequency and span, linear or log axis; peak marker; 8 markers (click, drag, peak hopping, peak tracking; live, max hold, min hold or average reading each) with differences between them. |
 | Frequency counter | Reciprocal counter on CH1/CH2 (level with hysteresis, interpolated crossings) or DIO 0–15 (up to about 50 MHz); gate 10 ms to 10 s; resolution and scatter shown. Absolute accuracy set by the board's clock reference. |
 | Waveform generator | W1 and W2: sine, square, triangle, sawtooth, sinc (1 to 100 lobes) and PRBS spread-spectrum (order 3 to 12), 1 Hz to 10 MHz, amplitude to 5 V, W2 phase offset. |
 | Power supplies | V+ and V− 0.5 to 5 V, on/off, USB or external power mode. Monitors show the USB and AUX input voltage and current and the board temperature. |
