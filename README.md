@@ -92,7 +92,7 @@ per doubling of the count, which brings out small harmonics that power averaging
 can be clicked onto the spectrum, dragged, hopped from peak to peak or set to track the highest peak, and each
 can read live, max hold, min hold or an average, with frequency and level differences between them.
 
-![Spectrum analyser: a 20-lobe sinc from the generator at 2 kHz, showing its flat comb of harmonics to 40 kHz](screenshots/spectrum.png)
+![Spectrum analyser: a 20-lobe sinc from the generator at 2 kHz, power-averaged, showing its flat comb of harmonics to 40 kHz; markers on 2 and 20 kHz read 0.2 dB apart](screenshots/spectrum.png)
 
 **A precision frequency counter.** The FPGA counts whole periods of a signal on CH1, CH2 or any DIO pin and
 times them with the 100 MHz sample clock, back to back with no dead time. On CH1 and CH2 it interpolates the

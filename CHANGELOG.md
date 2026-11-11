@@ -4,6 +4,7 @@ Notable changes to the app (`ad2.html`) and its FPGA design (`hdl/`), newest fir
 
 ## 2026-11-11
 
+- README screenshots retaken with the current app (the scope picture had shown the spectrum view).
 - **New scope trigger sources:** AWG (the start of each waveform-generator period, so the trace locks to W1/W2
   whatever their shape or level) and DIO 0-15 (a rising or falling edge on that pin). The FPGA's DIO edge
   detector, used by the logic analyser, can now also trigger the scope (cross-trigger source 5); a DIO trigger
