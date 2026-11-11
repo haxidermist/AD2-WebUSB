@@ -14,6 +14,7 @@ design's bitstream, built from these files, so you only need them to study or ch
 | `usb_fifo.v` | FT232H synchronous FIFO: clock watchdog, command packets, data to the host. |
 | `adf4360_spi.v` | ADF4360 clock synthesiser register writer (JTAG USER1). |
 | `microwire_reader.v` | Calibration EEPROM (93LC66B) reader. |
+| `freq_counter.v` | Reciprocal frequency counter on CH1/CH2 or a DIO pin. |
 | `ad2_defs.vh` | Shared definitions: command codes, signatures, a Gray-code helper. |
 | `ad2_top.ucf` | Pin map, grouped by function with the board's net names, plus the timing constraints. |
 | `build.sh` | Builds `build/ad2.bit` with Xilinx ISE 14.7. |
@@ -64,6 +65,8 @@ followed by a few idle TCKs before the next scan that depends on it (the app clo
 | `67` | `CMD_XTRIG` | cross-trigger routing and the T1/T2 pins; capture source 3 = AWG start, 5 = DIO pattern/edge in scope mode |
 | `68` | `CMD_DDS` | DDS frequency |
 | `69` | `CMD_EEPROM` | read a calibration EEPROM word (next USER2 capture) |
+| `6A`, `6B` | `CMD_FREQ`, `CMD_FREQ_GATE` | frequency counter: source, level, run; gate time |
+| `6C` | `CMD_FREQ_READ` | read a frequency-counter result word (next USER2 capture); word 0 snapshots the result |
 
 The status word reads back the signature `A5`, so the app can tell this design is loaded, and sets bits 47 and 46
 to announce the 8-bit FIFO and the FIFO command packets. The app reloads its own design if any of them is missing.

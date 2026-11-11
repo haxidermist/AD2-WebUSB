@@ -9,7 +9,8 @@
 //          {SIG_STATUS, 2'b11, overflow, fifo_alive, fifo_locked, awg_locked, pll_lock, done, run, stage[1:0],
 //           tpos[12:0], 7'b0, khz[16:0]}; bit 47 announces the 8-bit FIFO, bit 46 FIFO command packets, khz = ADC
 //          clock cycles per ms. After CMD_PINS / CMD_EEPROM the next capture returns {SIG_PINS, 32'b0, DIO pins} /
-//          {SIG_EEPROM, 23'b0, busy, address, word} instead.
+//          {SIG_EEPROM, 23'b0, busy, address, word} instead, and after CMD_FREQ_READ a frequency-counter result word
+//          {SIG_FREQ, measurement number, word[39:0]}.
 //   USER3  64-bit control port {oe[31:0], out[31:0]} for slow bit-banged I/O; capture returns {oe, pin levels}.
 //          Bit assignment in ad2_top.ucf; the reset values are WaveForms' idle levels.
 //   USER4  memory port: capture loads the 32-bit header {SIG_STATUS, triggered, half, 9'b0, tpos}; then every 32 bits
@@ -18,7 +19,7 @@
 //
 // Commands are decoded in the always-running 12 MHz domain, from JTAG or from FIFO command packets (usb_fifo.v). A JTAG
 // write therefore takes effect about 0.5 us after Update-DR; the app clocks 16 idle TCKs after each USER2 write.
-// CMD_PINS and CMD_EEPROM are decoded in the JTAG domain, because their result must be ready for the very next scan.
+// CMD_PINS, CMD_EEPROM and CMD_FREQ_READ are decoded in the JTAG domain, because their result must be ready for the very next scan.
 //
 // Clock domains: tck (JTAG, only while scanning), clk12 (P7, 12 MHz, always running), clk100 (ADC clock from the
 // ADF4360 via H12), the AWG DCM copy of clk100, and the FIFO clock (60 MHz, only during FIFO sessions). Values cross
@@ -115,6 +116,10 @@ module ad2_top (
     reg  [12:0] alast = 13'h0;
     reg  [31:0] ftw_t = 32'h0;
     reg         dds_t = 1'b0, ftw_tog = 1'b0;
+    reg         fc_run = 1'b0;                         // frequency counter (CMD_FREQ, CMD_FREQ_GATE)
+    reg  [4:0]  fc_src = 5'd0;
+    reg  [13:0] fc_level = 14'h0, fc_low = 14'h0;
+    reg  [31:0] fc_gate = 32'd100000000;
 
     // status from the modules
     wire        run, done, trg, tph, capev, done_t, cont_t, avg, xev, awg_start_t, awg_ev_t;
@@ -132,6 +137,20 @@ module ad2_top (
     // ---------------------------------------------------------------------------------------------------------------
     reg  [55:0] sr2 = 56'h0;
     reg         sel_pins = 1'b0, sel_ee = 1'b0;        // the next capture returns the DIO pins / the EEPROM word
+    reg         sel_fc = 1'b0;                         // ... / a frequency-counter result word
+    reg  [1:0]  fc_word = 2'd0;
+    wire [7:0]  fc_seq;
+    wire [31:0] fc_periods;
+    wire [39:0] fc_cycles;
+    wire [27:0] fc_first, fc_last;
+    // reading word 0 takes a snapshot of the whole result, so words 1-3 come from the same measurement even when
+    // a new one completes during the read (the result registers change only once per measurement)
+    reg  [7:0]  fs_seq = 8'h0;
+    reg  [31:0] fs_periods = 32'h0;
+    reg  [39:0] fs_cycles = 40'h0;
+    reg  [27:0] fs_first = 28'h0, fs_last = 28'h0;
+    wire [39:0] fc_data = fc_word == 2'd0 ? {8'h0, fs_periods} : fc_word == 2'd1 ? fs_cycles
+                        : fc_word == 2'd2 ? {12'h0, fs_first} : {12'h0, fs_last};
     reg  [7:0]  ee_addr = 8'h0;
     reg         ee_start = 1'b0;                       // toggles: read one EEPROM word
     reg  [55:0] jword = 56'h0;                         // last word written over JTAG
@@ -143,11 +162,16 @@ module ad2_top (
                           tpos, 7'b0, khz};
     always @(posedge tck) begin
         if (sel2 && capture) sr2 <= sel_ee ? {SIG_EEPROM, 23'b0, ee_busy, ee_addr, ee_word}
-                                  : sel_pins ? {SIG_PINS, 32'h0, dio_pins} : status;
+                                  : sel_pins ? {SIG_PINS, 32'h0, dio_pins} : sel_fc ? {SIG_FREQ, fs_seq, fc_data} : status;
         else if (sel2 && shift) sr2 <= {tdi, sr2[55:1]};
         if (sel2 && update) begin
             sel_pins <= (sr2[55:48] == CMD_PINS);
             sel_ee <= (sr2[55:48] == CMD_EEPROM);
+            sel_fc <= (sr2[55:48] == CMD_FREQ_READ);
+            if (sr2[55:48] == CMD_FREQ_READ) begin
+                fc_word <= sr2[1:0];
+                if (sr2[1:0] == 2'd0) begin fs_seq <= fc_seq; fs_periods <= fc_periods; fs_cycles <= fc_cycles; fs_first <= fc_first; fs_last <= fc_last; end
+            end
             if (sr2[55:48] == CMD_EEPROM) begin ee_addr <= sr2[7:0]; ee_start <= ~ee_start; end
             jword <= sr2; jword_t <= ~jword_t;
         end
@@ -185,6 +209,8 @@ module ad2_top (
             CMD_XTRIG:    begin csrc <= cw[2:0]; cpol <= cw[3]; asrc <= cw[6:4]; psrc <= cw[10:8];
                                 t1o <= cw[14:12]; t2o <= cw[18:16]; end
             CMD_DDS:      begin ftw_t <= cw[31:0]; dds_t <= cw[32]; ftw_tog <= ~ftw_tog; end
+            CMD_FREQ:     begin fc_level <= cw[13:0]; fc_low <= cw[13:0] - cw[27:14]; fc_src <= cw[32:28]; fc_run <= cw[33]; end
+            CMD_FREQ_GATE: fc_gate <= cw[31:0];
             default: ;
         endcase
     end
@@ -280,6 +306,11 @@ module ad2_top (
         .ftw_t(ftw_t), .dds_t(dds_t), .ftw_tog(ftw_tog), .asrc(asrc), .start_t(awg_start_t),
         .mem_wclk(tck), .mem_we(word_in && acfg[1]), .mem_waddr(lad), .mem_wdata({li[30:17], li[14:1]}),
         .dac_d(awg_d), .dac_clk(awg_clkio), .locked(awg_locked), .ev_t(awg_ev_t));
+
+    freq_counter u_fc (
+        .clk100(clk100), .adc_rise(adc_rise), .adc_fall(adc_fall), .dio(la_rise),
+        .run(fc_run), .src(fc_src), .level(fc_level), .low(fc_low), .gate(fc_gate),
+        .seq(fc_seq), .periods(fc_periods), .cycles(fc_cycles), .first(fc_first), .last(fc_last));
 
     usb_fifo u_usb (
         .clk12(clk12), .ft_clk(ft_clk), .ft_rxf_n(ft_rxf_n), .ft_txe_n(ft_txe_n),

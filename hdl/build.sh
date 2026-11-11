@@ -7,7 +7,7 @@ SETTINGS=${1:-/opt/Xilinx/14.7/ISE_DS/settings64.sh}
 [ -f "$SETTINGS" ] || SETTINGS=/tools/Xilinx/14.7/ISE_DS/settings64.sh
 [ -f "$SETTINGS" ] || { echo "ISE 14.7 settings64.sh not found: pass its path as the first argument" >&2; exit 1; }
 
-SOURCES="ad2_top.v scope_capture.v dio_pattern.v awg_player.v usb_fifo.v adf4360_spi.v microwire_reader.v"
+SOURCES="ad2_top.v scope_capture.v dio_pattern.v awg_player.v usb_fifo.v adf4360_spi.v microwire_reader.v freq_counter.v"
 PART=xc6slx16l-1L-cpg196
 
 cd "$(dirname "$0")"

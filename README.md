@@ -92,6 +92,12 @@ per doubling of the count, which brings out small harmonics that power averaging
 
 ![Spectrum analyser: a 20-lobe sinc from the generator at 2 kHz, showing its flat comb of harmonics to 40 kHz](screenshots/spectrum.png)
 
+**A precision frequency counter.** The FPGA counts whole periods of a signal on CH1, CH2 or any DIO pin and
+times them with the 100 MHz sample clock, back to back with no dead time. On CH1 and CH2 it interpolates the
+crossing times between ADC samples, which takes a 1 MHz sine to about 3 ppb scatter in a 0.1 s gate; square
+waves on the DIO pins up to 25 MHz count exactly. The readout shows only as many digits as the measurement
+supports.
+
 **A generator with more than the usual shapes.** Besides sine, square, triangle and sawtooth, the waveform
 generator can play a band-limited sinc (a flat comb of equal harmonics, handy for a quick frequency-response
 sweep) and a pseudo-random PRBS sequence (a spread-spectrum test signal). Frequency, amplitude and the phase of
@@ -115,6 +121,7 @@ The screenshots are of the app running on a real board, with W1 looped back to C
 |---|---|
 | Oscilloscope | 2 channels, 14-bit, 10 kS/s to 100 MS/s, 8192 samples. 1 mV/div to 5 V/div with offset; the two hardware input ranges (±2.7 V and ±25 V) are picked automatically. Trigger on a CH1 or CH2 level crossing, on the start of each waveform-generator period, or on an edge of any DIO pin, with auto timeout. Trigger-aligned averaging. |
 | Spectrum analyser | 8192-point FFT of both channels in dBV. Blackman-Harris, Hann, flat-top or rectangular window; live, averaged or max-hold trace; vector averaging of trigger-aligned waveforms; centre frequency and span, linear or log axis; peak marker. |
+| Frequency counter | Reciprocal counter on CH1/CH2 (level with hysteresis, interpolated crossings) or DIO 0–15 (up to about 50 MHz); gate 10 ms to 10 s; resolution and scatter shown. Absolute accuracy set by the board's clock reference. |
 | Waveform generator | W1 and W2: sine, square, triangle, sawtooth, sinc (1 to 100 lobes) and PRBS spread-spectrum (order 3 to 12), 1 Hz to 10 MHz, amplitude to 5 V, W2 phase offset. |
 | Power supplies | V+ and V− 0.5 to 5 V, on/off, USB or external power mode. Monitors show the USB and AUX input voltage and current and the board temperature. |
 | Logic analyser | 16 channels (DIO 0–15, view 8 or 16), selectable rate, pattern trigger with optional edge, zoom. |

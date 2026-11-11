@@ -18,11 +18,17 @@ localparam [7:0] CMD_SUPPLIES  = 8'h66;   // [1:0] user supply enables {EN_PWR_U
 localparam [7:0] CMD_XTRIG     = 8'h67;   // cross-trigger routing, see dio_pattern.v (capture source 5: DIO in scope mode)
 localparam [7:0] CMD_DDS       = 8'h68;   // [31:0] DDS frequency tuning word, [32] DDS on
 localparam [7:0] CMD_EEPROM    = 8'h69;   // [7:0] word address: read one calibration EEPROM word
+localparam [7:0] CMD_FREQ      = 8'h6A;   // frequency counter: [13:0] level, [27:14] hysteresis, [32:28] source
+                                          // (0 CH1, 1 CH2, 2..17 DIO 0..15), [33] run
+localparam [7:0] CMD_FREQ_GATE = 8'h6B;   // [31:0] counter gate in 100 MHz cycles
+localparam [7:0] CMD_FREQ_READ = 8'h6C;   // [1:0] result word for the next USER2 capture: 0 periods, 1 cycles,
+                                          // 2 samples at the first edge, 3 at the last edge; word 0 snapshots all four
 
 // Signatures in the top byte of the read-back words.
 localparam [7:0] SIG_STATUS    = 8'hA5;   // USER1/USER2 status, USER4 header, FIFO snapshot header
 localparam [7:0] SIG_PINS      = 8'hA6;   // USER2 after CMD_PINS
 localparam [7:0] SIG_EEPROM    = 8'hA7;   // USER2 after CMD_EEPROM
+localparam [7:0] SIG_FREQ      = 8'hA8;   // USER2 after CMD_FREQ_READ: {SIG_FREQ, measurement number, 40-bit word}
 
 // Host -> FPGA FIFO byte that starts a command packet (followed by the 7 bytes of a command word, low byte first).
 localparam [7:0] FIFO_CMD      = 8'h80;
