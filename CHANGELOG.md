@@ -23,6 +23,7 @@ Notable changes to the app (`ad2.html`) and its FPGA design (`hdl/`), newest fir
   pin, gate 10 ms to 10 s. Checked against the generator, which runs on the same clock: a 1 MHz sine reads to
   within 0.01 ppb with 2.6 ppb scatter (0.1 s gate), DIO squares up to 25 MHz count exactly. The display
   shows as many digits as the measured scatter supports.
+  Click the reading to switch between frequency and period (remembered).
 - **Spectrum centre frequency:** a Centre control next to Span. The band shown is centre ± span/2, kept within
   0 Hz and half the sample rate; the −/+ buttons move it by a tenth of the span. Centre 0 shows the band from
   0 Hz as before.

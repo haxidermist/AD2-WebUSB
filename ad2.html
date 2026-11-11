@@ -187,7 +187,7 @@
 </aside>
 
 <header class="topbar">
-  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 04:21 UTC</span></b>
+  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 04:30 UTC</span></b>
   <span class="leds"><span class="led g" id="l_link" title="link"></span><span class="led y" id="l_trig" title="trigger"></span><span class="led r" id="l_ovr" title="ADC clipped"></span></span>
   <button id="connect" class="primary" data-help="Connect to the Analog Discovery 2 over WebUSB. The first time, Chrome asks you to pick “Digilent USB Device”. Close WaveForms and any cap run first: only one program can hold the board. On Windows the board needs the WinUSB driver (install it once with Zadig, see the README); on Linux run detach.py after plugging it in.">Connect</button>
   <button id="disconnect" disabled data-help="Release the board so WaveForms or cap can use it. Outputs keep their last state.">Disconnect</button>
@@ -249,7 +249,7 @@
   <input type="number" id="tlev" value="0"><button id="single"></button><button id="run">Run</button>
   <select id="shape"><option>sine</option><option>square</option><option>triangle</option><option>saw</option><option value="sinc">sinc</option><option value="prbs">spread (PRBS)</option></select>
   <input type="number" id="slobes" value="8"><input type="number" id="sorder" value="7">
-  <select id="fcsrc"><option value="ch1">CH1</option><option value="ch2">CH2</option><option value="0">DIO 0</option><option value="1">DIO 1</option><option value="2">DIO 2</option><option value="3">DIO 3</option><option value="4">DIO 4</option><option value="5">DIO 5</option><option value="6">DIO 6</option><option value="7">DIO 7</option><option value="8">DIO 8</option><option value="9">DIO 9</option><option value="10">DIO 10</option><option value="11">DIO 11</option><option value="12">DIO 12</option><option value="13">DIO 13</option><option value="14">DIO 14</option><option value="15">DIO 15</option></select><input type="number" id="fclev" value="0"><select id="fcgate"><option value="0.01">10 ms</option><option value="0.1">100 ms</option><option value="1" selected>1 s</option><option value="10">10 s</option></select>
+  <select id="fcsrc"><option value="ch1">CH1</option><option value="ch2">CH2</option><option value="0">DIO 0</option><option value="1">DIO 1</option><option value="2">DIO 2</option><option value="3">DIO 3</option><option value="4">DIO 4</option><option value="5">DIO 5</option><option value="6">DIO 6</option><option value="7">DIO 7</option><option value="8">DIO 8</option><option value="9">DIO 9</option><option value="10">DIO 10</option><option value="11">DIO 11</option><option value="12">DIO 12</option><option value="13">DIO 13</option><option value="14">DIO 14</option><option value="15">DIO 15</option></select><input type="number" id="fclev" value="0"><select id="fcshow"><option value="f">frequency</option><option value="t">period</option></select><select id="fcgate"><option value="0.01">10 ms</option><option value="0.1">100 ms</option><option value="1" selected>1 s</option><option value="10">10 s</option></select>
   <input type="number" id="freq" value="1000"><input type="number" id="a1" value="1"><input type="number" id="a2" value="1"><input type="number" id="ph" value="0">
   <button id="awgon"></button><button id="awgoff"></button><span id="awgst"></span>
   <input type="number" id="vp" value="1"><input type="number" id="vm" value="1"><input type="checkbox" id="vpon"><input type="checkbox" id="vmon">
@@ -1407,6 +1407,11 @@ function fcFormat(f, rel) {                          // as many digits as the re
   const [d, u] = f >= 1e6 ? [1e6, 'MHz'] : f >= 1e3 ? [1e3, 'kHz'] : [1, 'Hz'];
   return (f / d).toPrecision(digits) + ' ' + u;
 }
+function fcPeriod(T, rel) {                         // a period with the same number of digits, in s / ms / µs / ns
+  const digits = Math.max(4, Math.min(12, Math.ceil(-Math.log10(rel)) + 1));
+  const [d, u] = T >= 1 ? [1, 's'] : T >= 1e-3 ? [1e-3, 'ms'] : T >= 1e-6 ? [1e-6, 'µs'] : [1e-9, 'ns'];
+  return (T / d).toPrecision(digits) + ' ' + u;
+}
 const fcRel = r => (fc.analog ? 0.05 : 1) / r.cycles;   // ±1 clock (DIO) or about ±0.05 clock interpolated (CH1/CH2)
 async function fcStart() {
   needReady('the frequency counter');
@@ -1436,8 +1441,8 @@ function fcScatter() {                               // relative standard deviat
 function fcText() {                                  // digits: the counter's resolution, or the measured scatter if larger
   if (!fc.on) return 'off';
   if (!fc.last) return 'waiting for edges';
-  const sc = fcScatter();
-  return fcFormat(fc.last.f, Math.max(fcRel(fc.last), isNaN(sc) ? 0 : sc));
+  const sc = fcScatter(), rel = Math.max(fcRel(fc.last), isNaN(sc) ? 0 : sc);
+  return $('fcshow').value === 't' ? 'T = ' + fcPeriod(1 / fc.last.f, rel) : 'f = ' + fcFormat(fc.last.f, rel);
 }
 function fcSpread() {                                 // scatter of the last readings, in parts per billion
   if (!fc.last) return '–';
@@ -1688,7 +1693,8 @@ const TILES = [
     range: () => { const c = $('fcsrc').value === 'ch2' ? 'r2' : 'r1'; return $(c).value === '1' ? [-2.5, 2.5] : [-25, 25]; },
     fmt: v => ($('fcsrc').value === 'ch1' || $('fcsrc').value === 'ch2') ? v.toFixed(2) + ' V' : 'not used' },
   { id: 't-fcgate', label: 'Gate', kind: 'cycle', input: 'fcgate' },
-  { id: 't-fcval', label: 'Frequency', kind: 'info', wide: true, val: fcText, click: () => {} },
+  { id: 't-fcval', label: 'Frequency / period', kind: 'info', wide: true, val: fcText,
+    click: () => { $('fcshow').value = $('fcshow').value === 't' ? 'f' : 't'; fire('fcshow'); renderTiles(); } },
   { id: 't-fcinfo', label: 'Measurement', kind: 'info', wide: true, val: fcSpread, click: () => {} },
   { g: 'Monitor' },
   { id: 't-usb', label: 'USB input', kind: 'info', val: () => $('musb').textContent, click: () => act('Monitor', monitors) },
@@ -1749,7 +1755,7 @@ const HELP = {
   't-fcsrc': 'What to count: CH1 or CH2 (rising crossings of Level, with 20 mV hysteresis, on the channel’s input range) or a DIO pin (rising edges, up to about 50 MHz).',
   't-fclev': 'Crossing level for CH1/CH2, in volts. Put it where the signal is steepest, usually near its middle.',
   't-fcgate': 'Minimum measuring time. A measurement ends at the first edge after the gate: longer gates give more digits (resolution improves in proportion), shorter ones update faster.',
-  't-fcval': 'Latest reading, shown with as many digits as its resolution supports. Absolute accuracy is set by the board’s clock reference (crystal tolerance, typically some tens of ppm), not by the resolution.',
+  't-fcval': 'Click to switch between frequency (f) and period (T). Latest reading, shown with as many digits as its resolution supports. Absolute accuracy is set by the board’s clock reference (crystal tolerance, typically some tens of ppm), not by the resolution.',
   't-fcinfo': 'Periods counted and the time they took, and the scatter (standard deviation) of the last readings in parts per billion: a direct measure of the counter’s precision on this signal.',
   't-flog': 'Linear or logarithmic frequency axis (log shows the same band, starting at most five decades below its top).',
   't-smark': 'Automatic peak marker (hollow, labelled “pk”) on the highest bin of each shown channel, interpolated between bins; the readout gives its frequency and level. Separate from the numbered markers: Clear markers does not remove it, this tile turns it off.',
@@ -1960,7 +1966,7 @@ document.addEventListener('change', () => { if (selTile) sliderSetup(); renderTi
 document.addEventListener('input', e => { if (e.target.id !== 'slider') renderTiles(); });
 setInterval(renderTiles, 500);                     // running state, captures and monitor text change underneath
 // remember control settings across reloads (per browser; storage may be unavailable)
-const KEEP = ['rate', 'slobes', 'sorder', 'view', 'swin', 'strace', 'sN', 'sref', 'sdiv', 'fmax', 'fcen', 'flog', 'fcsrc', 'fclev', 'fcgate', 'smark', 'vis1', 'vis2', 'avgon', 'avgN', 'r1', 'r2', 'vdiv1', 'vdiv2', 'off1', 'off2', 'tsrc', 'tedge', 'tlev', 'shape', 'freq', 'a1', 'a2', 'ph', 'vp', 'vm', 'lrate', 'lch', 'ltrig', 'lmask', 'lval', 'ledge', 'lpol', 'lzoom', 'pgmask', 'pgrate', 'dout', 'doe'];
+const KEEP = ['rate', 'slobes', 'sorder', 'view', 'swin', 'strace', 'sN', 'sref', 'sdiv', 'fmax', 'fcen', 'flog', 'fcsrc', 'fclev', 'fcgate', 'fcshow', 'smark', 'vis1', 'vis2', 'avgon', 'avgN', 'r1', 'r2', 'vdiv1', 'vdiv2', 'off1', 'off2', 'tsrc', 'tedge', 'tlev', 'shape', 'freq', 'a1', 'a2', 'ph', 'vp', 'vm', 'lrate', 'lch', 'ltrig', 'lmask', 'lval', 'ledge', 'lpol', 'lzoom', 'pgmask', 'pgrate', 'dout', 'doe'];
 try { const st = JSON.parse(localStorage.getItem('ad2-controls') || '{}'); for (const id of KEEP) if (id in st) $(id).value = st[id]; } catch {}
 for (const id of KEEP) $(id).addEventListener('change', () => {
   try { const st = {}; for (const k of KEEP) st[k] = $(k).value; localStorage.setItem('ad2-controls', JSON.stringify(st)); } catch {}
@@ -1977,7 +1983,7 @@ setBusy(false); draw(); ladraw();
 if (location.hash === '#debug') window.ad2debug = {
   sineResidual,
   get ad() { return ad; },                          // the connected driver, for board tests
-  get state() { return { spec, last, avg }; },     // spectrum, last capture and average, for board tests
+  get state() { return { spec, last, avg, fc }; }, // spectrum, last capture, average and counter, for tests
   async startupWith(fake) { ad = fake; await startup(); return { ready: boardReady, state: $('state').textContent }; },
   scope(ch1, ch2, dt = 1e-6) { specUpdate(ch1, ch2, dt); mkUpdate(); last = { ch1, ch2, dt, pre: 0, o: opts(), ms: 0, triggered: false }; draw(); return last.peaks; },
   feed(ch1, ch2, pre, triggered = true, dt = 1e-6) {  // one synthetic capture through the averaging path
