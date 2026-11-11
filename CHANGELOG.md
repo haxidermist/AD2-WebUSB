@@ -13,6 +13,8 @@ Notable changes to the app (`ad2.html`) and its FPGA design (`hdl/`), newest fir
   right-click to delete it. Peak hopping (Peak, ◀ Peak, Peak ▶ tiles; Home, ←, → keys) jumps between real
   peaks, skipping noise and window skirts, and refines each to the peak's exact frequency. A table under the
   plot lists the markers with Δf and Δ level to marker 1.
+  The automatic peak markers (one per channel, switched by the Peak marker tile) are now drawn hollow and
+  labelled "pk", so they are not mistaken for numbered markers left after Clear markers.
 - **Frequency counter:** a reciprocal counter in the FPGA on CH1, CH2 (with interpolated crossings) or any DIO
   pin, gate 10 ms to 10 s. Checked against the generator, which runs on the same clock: a 1 MHz sine reads to
   within 0.01 ppb with 2.6 ppb scatter (0.1 s gate), DIO squares up to 25 MHz count exactly. The display

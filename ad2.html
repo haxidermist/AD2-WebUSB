@@ -187,7 +187,7 @@
 </aside>
 
 <header class="topbar">
-  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 04:06 UTC</span></b>
+  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 04:16 UTC</span></b>
   <span class="leds"><span class="led g" id="l_link" title="link"></span><span class="led y" id="l_trig" title="trigger"></span><span class="led r" id="l_ovr" title="ADC clipped"></span></span>
   <button id="connect" class="primary" data-help="Connect to the Analog Discovery 2 over WebUSB. The first time, Chrome asks you to pick “Digilent USB Device”. Close WaveForms and any cap run first: only one program can hold the board. On Windows the board needs the WinUSB driver (install it once with Zadig, see the README); on Linux run detach.py after plugging it in.">Connect</button>
   <button id="disconnect" disabled data-help="Release the board so WaveForms or cap can use it. Outputs keep their last state.">Disconnect</button>
@@ -1172,7 +1172,11 @@ function drawSpectrum(g, W, H) {
     g.stroke();
     if ($('smark').value === '1') {
       const pk = peakOf(P, Math.floor(fmin / df), Math.floor(fmax / df), df); peaks[c] = pk;
-      if (pk) { const x = xf(pk.f), y = yd(pk.db); g.fillStyle = css(c ? '--c2' : '--c1'); g.beginPath(); g.moveTo(x, y - 3); g.lineTo(x - 5, y - 12); g.lineTo(x + 5, y - 12); g.fill(); }
+      if (pk) {                                      // automatic peak marker: hollow and labelled, unlike the numbered markers
+        const x = xf(pk.f), y = yd(pk.db); g.strokeStyle = css(c ? '--c2' : '--c1'); g.lineWidth = 1.5;
+        g.beginPath(); g.moveTo(x, y - 3); g.lineTo(x - 5, y - 12); g.lineTo(x + 5, y - 12); g.closePath(); g.stroke();
+        g.fillStyle = css(c ? '--c2' : '--c1'); g.font = '10px ' + (css('--mono') || 'monospace'); g.fillText('pk', x + 7, y - 6);
+      }
     }
   }
   mkDraw(g);
@@ -1706,7 +1710,7 @@ const HELP = {
   't-mkr': 'Move the selected marker to the next peak at a higher frequency. Key: →.',
   't-mkch': 'Which trace the selected marker reads: CH1 or CH2.',
   't-mkdel': 'Delete the selected marker. Key: Delete.',
-  't-mkclr': 'Remove all markers.',
+  't-mkclr': 'Remove all numbered markers. The hollow “pk” peak markers are separate: switch them off with Peak marker.',
   't-fcon': 'Frequency counter on or off. The FPGA counts whole input periods and times them with the 100 MHz sample clock (reciprocal counting), back to back with no dead time, so the resolution is the same at any frequency: about 10 ns per gate for DIO, and far finer for CH1/CH2, where the crossing times are interpolated between ADC samples. Works alongside the scope.',
   't-fcsrc': 'What to count: CH1 or CH2 (rising crossings of Level, with 20 mV hysteresis, on the channel’s input range) or a DIO pin (rising edges, up to about 50 MHz).',
   't-fclev': 'Crossing level for CH1/CH2, in volts. Put it where the signal is steepest, usually near its middle.',
@@ -1714,7 +1718,7 @@ const HELP = {
   't-fcval': 'Latest reading, shown with as many digits as its resolution supports. Absolute accuracy is set by the board’s clock reference (crystal tolerance, typically some tens of ppm), not by the resolution.',
   't-fcinfo': 'Periods counted and the time they took, and the scatter (standard deviation) of the last readings in parts per billion: a direct measure of the counter’s precision on this signal.',
   't-flog': 'Linear or logarithmic frequency axis (log shows the same band, starting at most five decades below its top).',
-  't-smark': 'Peak marker on the highest bin of each shown channel, interpolated between bins; the readout gives its frequency and level.',
+  't-smark': 'Automatic peak marker (hollow, labelled “pk”) on the highest bin of each shown channel, interpolated between bins; the readout gives its frequency and level. Separate from the numbered markers: Clear markers does not remove it, this tile turns it off.',
   't-sreset': 'Clear the averaged or max-hold trace and start again.',
   't-slobes': 'Sinc shape: zero crossings on each side of the central peak (1 to 100). A repeating sinc has a flat comb spectrum: equal lines at multiples of the frequency up to about lobes × frequency, then a sharp cut-off; handy for a one-shot frequency response.',
   't-sorder': 'Spread spectrum shape: length n of the maximal-length LFSR, giving 2^n − 1 pseudo-random ±1 chips per cycle (7 to 4095). Chip rate = frequency × (2^n − 1); the spectrum is lines at the frequency spacing under a sinc² envelope with its first null at the chip rate. Keep the chip rate below about 10 MHz for clean chips.',
