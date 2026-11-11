@@ -189,7 +189,7 @@
 </aside>
 
 <header class="topbar">
-  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 04:41 UTC</span></b>
+  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 04:54 UTC</span></b>
   <span class="leds"><span class="led g" id="l_link" title="link"></span><span class="led y" id="l_trig" title="trigger"></span><span class="led r" id="l_ovr" title="ADC clipped"></span></span>
   <button id="connect" class="primary" data-help="Connect to the Analog Discovery 2 over WebUSB. The first time, Chrome asks you to pick “Digilent USB Device”. Close WaveForms and any cap run first: only one program can hold the board. On Windows the board needs the WinUSB driver (install it once with Zadig, see the README); on Linux run detach.py after plugging it in.">Connect</button>
   <button id="disconnect" disabled data-help="Release the board so WaveForms or cap can use it. Outputs keep their last state.">Disconnect</button>
@@ -1040,7 +1040,9 @@ async function shot() {
   try { r = await ad.acquire(o); }
   catch (e) { log('capture failed (' + e.message + '), retrying once'); r = await ad.acquire(o); }   // first FIFO session after init can fail
   const d = accumulate(r, o);
-  if (inSpec) { specUpdate(vec ? d.ch1 : r.ch1, vec ? d.ch2 : r.ch2, r.dt); mkUpdate(); }   // the FFT only when it is shown
+  // Spectrum + Average without a trigger: power-average the spectra over the Average count instead
+  const pavg = inSpec && !vec && $('avgon').value === '1' && Number($('avgN').value) > 1;
+  if (inSpec) { specUpdate(vec ? d.ch1 : r.ch1, vec ? d.ch2 : r.ch2, r.dt, pavg ? { mode: 'avg', N: Number($('avgN').value) } : null); mkUpdate(); }
   last = { ...r, ch1: d.ch1, ch2: d.ch2, raw1: r.ch1, raw2: r.ch2, avgInfo: d.avgInfo, vec: vec ? d.avgInfo : '', o, ms: performance.now() - t0 }; draw();
   if (!running || performance.now() - (shot.logged || 0) > 2000) {          // results go to page.log (throttled while running)
     shot.logged = performance.now();
@@ -1108,8 +1110,9 @@ function ampSpectrum(x, key) {
 }
 const spec = { key: '', n: 0, p: [null, null] };     // per channel: power (V peak squared) per bin
 function specReset() { spec.key = ''; spec.n = 0; spec.p = [null, null]; }
-function specUpdate(x1, x2, dt) {
-  const win = $('swin').value, mode = $('strace').value, N = Number($('sN').value);
+function specUpdate(x1, x2, dt, over) {               // over: { mode, N } replaces the Trace setting (Average without trigger)
+  const win = $('swin').value, mode = over ? over.mode : $('strace').value, N = over ? over.N : Number($('sN').value);
+  spec.mode = mode; spec.N = N;
   const key = JSON.stringify([win, mode, N, dt, $('r1').value, $('r2').value]); if (key !== spec.key) { specReset(); spec.key = key; }
   const now = [x1, x2].map(x => { const A = ampSpectrum(x, win), P = new Float64Array(A.length); for (let k = 0; k < A.length; k++) P[k] = A[k] * A[k]; return P; });
   if (!spec.n || mode === 'live') { spec.p = now; spec.n = 1; return; }
@@ -1190,7 +1193,7 @@ function drawSpectrum(g, W, H) {
   }
   const wv = windowOf($('swin').value), mode = $('strace').value;
   $('sinfo').textContent = `Spectrum ${fmin ? fmtHz(fmin) : '0 Hz'}–${fmtHz(fmax)}${logx ? ' (log)' : ''}${fmin && !logx ? ` (centre ${fmtHz((fmin + fmax) / 2)})` : ''}, ${WINDOWS[$('swin').value].name}, bin ${fmtHz(df)}, RBW ${fmtHz(df * wv.enbw)}, `
-    + (mode === 'live' ? 'live' : mode === 'max' ? `max hold (${spec.n})` : `average ${spec.n}/${$('sN').value}`) + `, ${(1 / dt / 1e6).toPrecision(3)} MS/s`
+    + (spec.mode === 'live' ? 'live' : spec.mode === 'max' ? `max hold (${spec.n})` : `power average ${spec.n}/${spec.N}`) + `, ${(1 / dt / 1e6).toPrecision(3)} MS/s`
     + (last.vec ? `, vector ${last.vec}` : '');
   last.peaks = peaks;
 }
@@ -1665,7 +1668,9 @@ const TILES = [
   { id: 't-run', label: 'Run / Stop', kind: 'toggle', val: () => running ? 'running' : 'stopped', on: () => running, click: () => press('run') },
   { id: 't-single', label: 'Single · p-p V', kind: 'act', val: () => last ? `${ppOf(last.ch1)} | ${ppOf(last.ch2)}` : '–', click: () => act('Single', shot) },
   { id: 't-avg', label: 'Average', kind: 'toggle', on: () => $('avgon').value === '1',
-    val: () => $('avgon').value !== '1' ? 'off' : $('tsrc').value === 'off' ? 'on · needs trigger' : `${avg.n}/${$('avgN').value}`,
+    val: () => $('avgon').value !== '1' ? 'off'
+      : $('view').value === 'spec' ? ($('tsrc').value === 'off' ? `power ${spec.n}/${$('avgN').value}` : `vector ${avg.n}/${$('avgN').value}`)
+      : $('tsrc').value === 'off' ? 'on · needs trigger' : `${avg.n}/${$('avgN').value}`,
     click: () => { $('avgon').value = $('avgon').value === '1' ? '0' : '1'; fire('avgon'); avgReset(); log('averaging ' + ($('avgon').value === '1' ? 'on, ' + $('avgN').value + ' captures' : 'off')); } },
   { id: 't-avgN', label: 'Average count', kind: 'var', input: 'avgN', scale: 'list' },
   { id: 't-avgreset', label: 'Restart average', kind: 'act', val: () => avg.n ? `${avg.n} so far` : '–', click: () => { avgReset(); log('average restarted'); } },
@@ -1783,7 +1788,7 @@ const HELP = {
   't-tlev': 'Trigger level in volts, within the source channel’s range. Shown as a dashed line on the scope. Used only with CH1/CH2 as the source.',
   't-tedge': 'Trigger on the rising or falling crossing of the level (CH1/CH2), or on the rising or falling edge of the DIO pin. Not used with AWG.',
   't-avgN': 'How many triggered captures the average uses, 2 to 256. Kept while averaging is off.',
-  't-avg': 'Averaging on or off. When on, averages N triggered captures point by point (noise drops about √N). Each capture is shifted by its interpolated trigger crossing, so edges stay sharp. Needs a trigger; untriggered (auto) captures are skipped. After N captures it keeps tracking (exponential, weight 1/N). Changing rate, range or trigger restarts it. In Spectrum view with a trigger, the spectrum is computed from this average (vector averaging): the noise floor drops by about 3 dB per doubling of N, but anything not locked to the trigger is averaged away too.',
+  't-avg': 'Averaging on or off. When on, averages N triggered captures point by point (noise drops about √N). Each capture is shifted by its interpolated trigger crossing, so edges stay sharp. Needs a trigger; untriggered (auto) captures are skipped. After N captures it keeps tracking (exponential, weight 1/N). Changing rate, range or trigger restarts it. In Spectrum view with a trigger, the spectrum is computed from this average (vector averaging): the noise floor drops by about 3 dB per doubling of N, but anything not locked to the trigger is averaged away too. In Spectrum view without a trigger, Average power-averages the spectra over N captures instead (smooths the noise floor; Trace is overridden while it is on).',
   't-avgreset': 'Discard the average and start again from the next capture.',
   't-avgtest': 'Self-test: plays a 1 kHz 1 V sine on W1/W2 (W2 must be wired to CH2), takes 20 triggered captures with Average 16, and logs the noise of a single capture vs the average around a fitted sine. Your settings and AWG state are restored afterwards.',
   't-view': 'Show the captures as a scope trace or as a spectrum (8192-point FFT of each capture, computed in the page). Run, Single, rate and the channel controls work in both views. The spectrum ignores the trigger unless Average is on, then it shows the spectrum of the trigger-aligned average (vector averaging).',
