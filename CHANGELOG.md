@@ -11,7 +11,8 @@ Notable changes to the app (`ad2.html`) and its FPGA design (`hdl/`), newest fir
 - README feature overview updated: trigger sources and update rate.
 - **Average without a trigger:** in Spectrum view, Average now power-averages the spectra over the Average count
   when no trigger is set (it used to do nothing there); with a trigger it vector-averages as before. The
-  Average tile and the spectrum info line say which is active.
+  Average tile and the spectrum info line say which is active. It is now the only averaging control: the
+  Spectrum group's Trace has just live and max hold, and its separate average count is gone.
 - **Zoom by dragging:** drag across empty spectrum to select a band; it becomes the new Centre and Span.
   Right-click on empty spectrum steps back through earlier zooms; the Full span tile returns to the whole band.
   A plain click still shows a marker, and dragging a marker still moves it.

@@ -189,7 +189,7 @@
 </aside>
 
 <header class="topbar">
-  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 04:54 UTC</span></b>
+  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 05:00 UTC</span></b>
   <span class="leds"><span class="led g" id="l_link" title="link"></span><span class="led y" id="l_trig" title="trigger"></span><span class="led r" id="l_ovr" title="ADC clipped"></span></span>
   <button id="connect" class="primary" data-help="Connect to the Analog Discovery 2 over WebUSB. The first time, Chrome asks you to pick “Digilent USB Device”. Close WaveForms and any cap run first: only one program can hold the board. On Windows the board needs the WinUSB driver (install it once with Zadig, see the README); on Linux run detach.py after plugging it in.">Connect</button>
   <button id="disconnect" disabled data-help="Release the board so WaveForms or cap can use it. Outputs keep their last state.">Disconnect</button>
@@ -240,8 +240,7 @@
   <select id="vis1"><option value="1">shown</option><option value="0">hidden</option></select><select id="vis2"><option value="1">shown</option><option value="0">hidden</option></select>
   <select id="view"><option value="scope">Scope</option><option value="spec">Spectrum</option></select>
   <select id="swin"><option value="bh">Blackman-Harris</option><option value="hann">Hann</option><option value="flat">Flat-top</option><option value="rect">Rectangular</option></select>
-  <select id="strace"><option value="live">live</option><option value="avg">average</option><option value="max">max hold</option></select>
-  <select id="sN"><option>2</option><option>4</option><option selected>8</option><option>16</option><option>32</option><option>64</option><option>128</option></select>
+  <select id="strace"><option value="live">live</option><option value="max">max hold</option></select>
   <input type="number" id="sref" value="10"><select id="sdiv"><option>1</option><option>2</option><option>5</option><option selected>10</option><option>20</option></select>
   <input type="number" id="fmax" value="50000000"><input type="number" id="fcen" value="0"><select id="flog"><option value="lin">linear</option><option value="log">log</option></select>
   <select id="smark"><option value="1">on</option><option value="0">off</option></select>
@@ -1058,7 +1057,7 @@ $('run').onclick = async () => {
   catch (e) { log('error: ' + e.message); $('state').innerHTML = `<span class="bad">${e.message}</span>`; }
   running = false; $('run').textContent = 'Run'; setBusy(false);
 };
-for (const id of ['r1', 'r2', 'rate', 'tsrc', 'tlev', 'tedge', 'vdiv1', 'vdiv2', 'off1', 'off2', 'vis1', 'vis2', 'view', 'swin', 'strace', 'sN', 'sref', 'sdiv', 'fmax', 'fcen', 'flog', 'smark']) $(id).addEventListener('change', () => draw());
+for (const id of ['r1', 'r2', 'rate', 'tsrc', 'tlev', 'tedge', 'vdiv1', 'vdiv2', 'off1', 'off2', 'vis1', 'vis2', 'view', 'swin', 'strace', 'sref', 'sdiv', 'fmax', 'fcen', 'flog', 'smark']) $(id).addEventListener('change', () => draw());
 // switching to Spectrum: start from the last capture (the FFT is not computed while the scope view is shown)
 $('view').addEventListener('change', () => { if ($('view').value === 'spec' && last) { specReset(); specUpdate(last.vec ? last.ch1 : last.raw1 || last.ch1, last.vec ? last.ch2 : last.raw2 || last.ch2, last.dt); draw(); } });
 
@@ -1111,7 +1110,7 @@ function ampSpectrum(x, key) {
 const spec = { key: '', n: 0, p: [null, null] };     // per channel: power (V peak squared) per bin
 function specReset() { spec.key = ''; spec.n = 0; spec.p = [null, null]; }
 function specUpdate(x1, x2, dt, over) {               // over: { mode, N } replaces the Trace setting (Average without trigger)
-  const win = $('swin').value, mode = over ? over.mode : $('strace').value, N = over ? over.N : Number($('sN').value);
+  const win = $('swin').value, mode = over ? over.mode : $('strace').value || 'live', N = over ? over.N : 1;
   spec.mode = mode; spec.N = N;
   const key = JSON.stringify([win, mode, N, dt, $('r1').value, $('r2').value]); if (key !== spec.key) { specReset(); spec.key = key; }
   const now = [x1, x2].map(x => { const A = ampSpectrum(x, win), P = new Float64Array(A.length); for (let k = 0; k < A.length; k++) P[k] = A[k] * A[k]; return P; });
@@ -1614,7 +1613,7 @@ $('pgoff').onclick = () => guard(async () => { await ad.pgStop(); $('pgst').text
 $('dset').onclick = () => guard(async () => { const p = await ad.dio(hx('dout'), hx('doe')); $('dpins').textContent = 'pins ' + p.toString(16).padStart(4, '0'); log(`DIO out ${$('dout').value} oe ${$('doe').value} -> ${$('dpins').textContent}`); });
 $('dread').onclick = () => guard(async () => { const p = await ad.dioRead(); $('dpins').textContent = 'pins ' + p.toString(16).padStart(4, '0'); log('DIO ' + $('dpins').textContent); });
 addEventListener('resize', () => { draw(); ladraw(); });
-for (const id of ['swin', 'strace', 'sN']) $(id).addEventListener('change', () => { specReset(); if (last && last.raw1) specUpdate(last.raw1, last.raw2, last.dt); });
+for (const id of ['swin', 'strace']) $(id).addEventListener('change', () => { specReset(); if (last && last.raw1) specUpdate(last.raw1, last.raw2, last.dt); });
 // ---------- tile control panel ----------
 const fmtHz = f => f >= 1e6 ? (f / 1e6).toPrecision(4) + ' MHz' : f >= 1e3 ? (f / 1e3).toPrecision(4) + ' kHz' : f.toPrecision(4) + ' Hz';
 const selText = id => $(id).options[$(id).selectedIndex].text;
@@ -1700,7 +1699,6 @@ const TILES = [
   { id: 't-view', label: 'View', kind: 'cycle', input: 'view' },
   { id: 't-swin', label: 'Window', kind: 'cycle', input: 'swin' },
   { id: 't-strace', label: 'Trace', kind: 'cycle', input: 'strace', val: () => selText('strace') + ($('strace').value === 'live' ? '' : ` · ${spec.n}`) },
-  { id: 't-sN', label: 'Spectrum avg', kind: 'var', input: 'sN', scale: 'list' },
   { id: 't-sref', unit: 'dBV', label: 'Ref level', kind: 'var', input: 'sref', scale: 'lin', min: -100, max: 30, step: 1, fmt: v => v.toFixed(0) + ' dBV' },
   { id: 't-sdiv', label: 'dB / div', kind: 'var', input: 'sdiv', scale: 'list' },
   { id: 't-fmax', unit: 'Hz', label: 'Span', kind: 'var', input: 'fmax', scale: 'log', min: 10, max: 5e7, fmt: v => fmtHz(Math.min(v, last ? 0.5 / last.dt : v)) },
@@ -1788,13 +1786,12 @@ const HELP = {
   't-tlev': 'Trigger level in volts, within the source channel’s range. Shown as a dashed line on the scope. Used only with CH1/CH2 as the source.',
   't-tedge': 'Trigger on the rising or falling crossing of the level (CH1/CH2), or on the rising or falling edge of the DIO pin. Not used with AWG.',
   't-avgN': 'How many triggered captures the average uses, 2 to 256. Kept while averaging is off.',
-  't-avg': 'Averaging on or off. When on, averages N triggered captures point by point (noise drops about √N). Each capture is shifted by its interpolated trigger crossing, so edges stay sharp. Needs a trigger; untriggered (auto) captures are skipped. After N captures it keeps tracking (exponential, weight 1/N). Changing rate, range or trigger restarts it. In Spectrum view with a trigger, the spectrum is computed from this average (vector averaging): the noise floor drops by about 3 dB per doubling of N, but anything not locked to the trigger is averaged away too. In Spectrum view without a trigger, Average power-averages the spectra over N captures instead (smooths the noise floor; Trace is overridden while it is on).',
+  't-avg': 'Averaging on or off. When on, averages N triggered captures point by point (noise drops about √N). Each capture is shifted by its interpolated trigger crossing, so edges stay sharp. Needs a trigger; untriggered (auto) captures are skipped. After N captures it keeps tracking (exponential, weight 1/N). Changing rate, range or trigger restarts it. In Spectrum view with a trigger, the spectrum is computed from this average (vector averaging): the noise floor drops by about 3 dB per doubling of N, but anything not locked to the trigger is averaged away too. In Spectrum view it is the spectrum’s averaging: with a trigger it vector-averages the waveforms (the noise floor drops), without one it power-averages the spectra over N captures (the noise floor gets smoother).',
   't-avgreset': 'Discard the average and start again from the next capture.',
   't-avgtest': 'Self-test: plays a 1 kHz 1 V sine on W1/W2 (W2 must be wired to CH2), takes 20 triggered captures with Average 16, and logs the noise of a single capture vs the average around a fitted sine. Your settings and AWG state are restored afterwards.',
   't-view': 'Show the captures as a scope trace or as a spectrum (8192-point FFT of each capture, computed in the page). Run, Single, rate and the channel controls work in both views. The spectrum ignores the trigger unless Average is on, then it shows the spectrum of the trigger-aligned average (vector averaging).',
   't-swin': 'FFT window. Blackman-Harris: low leakage, good default. Hann: narrower peaks. Flat-top: accurate amplitudes of tones between bins. Rectangular: none (for signals exactly periodic in the record).',
-  't-strace': 'Live: each capture. Average: power average of N spectra (smooths the noise floor but does not lower it; for that use Average with a trigger, which vector-averages the waveforms first). Max hold: highest level seen per bin.',
-  't-sN': 'How many captures the spectrum average uses, 2 to 128.',
+  't-strace': 'Live: each capture. Max hold: the highest level seen per bin since the trace restarted. To average the spectrum, use Average (Run group): without a trigger it power-averages the spectra (a smoother noise floor), with a trigger it vector-averages the waveforms (a lower noise floor).',
   't-sref': 'Level at the top of the screen, in dBV (0 dBV = 1 V rms). A 1 V-peak sine reads −3.0 dBV.',
   't-sdiv': 'dB per division (10 divisions).',
   't-fmax': 'Width of the frequency band shown, around Centre. Limited to half the sample rate: raise the scope sample rate for wider spans, lower it for finer bins (bin = rate / 8192).',
@@ -2024,7 +2021,7 @@ document.addEventListener('change', () => { if (selTile) sliderSetup(); renderTi
 document.addEventListener('input', e => { if (e.target.id !== 'slider') renderTiles(); });
 setInterval(renderTiles, 500);                     // running state, captures and monitor text change underneath
 // remember control settings across reloads (per browser; storage may be unavailable)
-const KEEP = ['rate', 'slobes', 'sorder', 'view', 'swin', 'strace', 'sN', 'sref', 'sdiv', 'fmax', 'fcen', 'flog', 'fcsrc', 'fclev', 'fcgate', 'fcshow', 'smark', 'vis1', 'vis2', 'avgon', 'avgN', 'r1', 'r2', 'vdiv1', 'vdiv2', 'off1', 'off2', 'tsrc', 'tedge', 'tlev', 'shape', 'freq', 'a1', 'a2', 'ph', 'vp', 'vm', 'lrate', 'lch', 'ltrig', 'lmask', 'lval', 'ledge', 'lpol', 'lzoom', 'pgmask', 'pgrate', 'dout', 'doe'];
+const KEEP = ['rate', 'slobes', 'sorder', 'view', 'swin', 'strace', 'sref', 'sdiv', 'fmax', 'fcen', 'flog', 'fcsrc', 'fclev', 'fcgate', 'fcshow', 'smark', 'vis1', 'vis2', 'avgon', 'avgN', 'r1', 'r2', 'vdiv1', 'vdiv2', 'off1', 'off2', 'tsrc', 'tedge', 'tlev', 'shape', 'freq', 'a1', 'a2', 'ph', 'vp', 'vm', 'lrate', 'lch', 'ltrig', 'lmask', 'lval', 'ledge', 'lpol', 'lzoom', 'pgmask', 'pgrate', 'dout', 'doe'];
 try { const st = JSON.parse(localStorage.getItem('ad2-controls') || '{}'); for (const id of KEEP) if (id in st) $(id).value = st[id]; } catch {}
 for (const id of KEEP) $(id).addEventListener('change', () => {
   try { const st = {}; for (const k of KEEP) st[k] = $(k).value; localStorage.setItem('ad2-controls', JSON.stringify(st)); } catch {}
@@ -2035,6 +2032,7 @@ try {
   const id = localStorage.getItem('ad2-tile'); selTile = TILES.find(t => t.id === id && (t.kind === 'var' || t.kind === 'bits16')) || null;
 } catch { setSide(true); setPanel(true); }
 if ($('avgN').selectedIndex < 0) $('avgN').value = '16';
+if ($('strace').selectedIndex < 0) $('strace').value = 'live';   // older saved settings had a Trace average
 syncRange(); sliderSetup(); renderTiles();
 setBusy(false); draw(); ladraw();
 // test hook (only with #debug in the URL): draw a synthetic capture without a board
