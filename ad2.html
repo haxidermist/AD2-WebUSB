@@ -154,6 +154,8 @@
   .bits button.b1 { background: var(--acc); color: #1a1a1a; }
   .tiles { grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .tile.wide { grid-column: 1 / -1; }                 /* a readout across the whole panel */
+  #t-fcval .tv { font-family: var(--mono); font-size: 15px; }
+  #t-fcval .hz1 { color: var(--ok); text-decoration: underline; text-underline-offset: 3px; }   /* the 1 Hz digit */
   .tgrp { color: var(--mut); font: 700 12px var(--cond); letter-spacing: 1.5px; }
   .tile { background: var(--tile); border: 0; border-radius: 6px; color: var(--fg); font-family: var(--cond); min-height: 62px;
           padding: 4px 3px; align-items: center; justify-content: center; text-align: center; gap: 2px;
@@ -187,7 +189,7 @@
 </aside>
 
 <header class="topbar">
-  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 04:36 UTC</span></b>
+  <b class="brand">AD2 <span>WebUSB</span> <span class="ver" id="build" data-help="Build of this page: when it was made. If it is older than the latest release, your browser is showing a cached copy: reload with Ctrl+Shift+R (Cmd+Shift+R on a Mac).">2026-11-11 04:41 UTC</span></b>
   <span class="leds"><span class="led g" id="l_link" title="link"></span><span class="led y" id="l_trig" title="trigger"></span><span class="led r" id="l_ovr" title="ADC clipped"></span></span>
   <button id="connect" class="primary" data-help="Connect to the Analog Discovery 2 over WebUSB. The first time, Chrome asks you to pick “Digilent USB Device”. Close WaveForms and any cap run first: only one program can hold the board. On Windows the board needs the WinUSB driver (install it once with Zadig, see the README); on Linux run detach.py after plugging it in.">Connect</button>
   <button id="disconnect" disabled data-help="Release the board so WaveForms or cap can use it. Outputs keep their last state.">Disconnect</button>
@@ -1445,6 +1447,17 @@ function fcFormat(f, rel) {                          // as many digits as the re
   const [d, u] = f >= 1e6 ? [1e6, 'MHz'] : f >= 1e3 ? [1e3, 'kHz'] : [1, 'Hz'];
   return (f / d).toPrecision(digits) + ' ' + u;
 }
+// scientific notation with the digits after the point in groups of three; with hz, the digit worth 1 Hz is highlighted
+function fcSci(x, rel, unit, hz) {
+  const digits = Math.max(4, Math.min(12, Math.ceil(-Math.log10(rel)) + 1));
+  let e = Math.floor(Math.log10(x)), m = (x / 10 ** e).toFixed(digits - 1);
+  if (m.startsWith('10')) { e++; m = (x / 10 ** e).toFixed(digits - 1); }      // rounding carried into a new digit
+  const [ip, fp = ''] = m.split('.');
+  const mark = (d, on) => on ? `<span class="hz1">${d}</span>` : d;           // fraction digit j is worth 10^(e-1-j)
+  let out = mark(ip, hz && e === 0);
+  if (fp) out += '.' + [...fp].map((d, j) => (j && j % 3 === 0 ? '&nbsp;' : '') + mark(d, hz && j === e - 1)).join('');
+  return `${out} × 10<sup>${e}</sup> ${unit}`;
+}
 function fcPeriod(T, rel) {                         // a period with the same number of digits, in s / ms / µs / ns
   const digits = Math.max(4, Math.min(12, Math.ceil(-Math.log10(rel)) + 1));
   const [d, u] = T >= 1 ? [1, 's'] : T >= 1e-3 ? [1e-3, 'ms'] : T >= 1e-6 ? [1e-6, 'µs'] : [1e-9, 'ns'];
@@ -1480,7 +1493,7 @@ function fcText() {                                  // digits: the counter's re
   if (!fc.on) return 'off';
   if (!fc.last) return 'waiting for edges';
   const sc = fcScatter(), rel = Math.max(fcRel(fc.last), isNaN(sc) ? 0 : sc);
-  return $('fcshow').value === 't' ? 'T = ' + fcPeriod(1 / fc.last.f, rel) : 'f = ' + fcFormat(fc.last.f, rel);
+  return $('fcshow').value === 't' ? 'T = ' + fcSci(1 / fc.last.f, rel, 's', false) : 'f = ' + fcSci(fc.last.f, rel, 'Hz', true);
 }
 function fcSpread() {                                 // scatter of the last readings, in parts per billion
   if (!fc.last) return '–';
@@ -1732,7 +1745,7 @@ const TILES = [
     range: () => { const c = $('fcsrc').value === 'ch2' ? 'r2' : 'r1'; return $(c).value === '1' ? [-2.5, 2.5] : [-25, 25]; },
     fmt: v => ($('fcsrc').value === 'ch1' || $('fcsrc').value === 'ch2') ? v.toFixed(2) + ' V' : 'not used' },
   { id: 't-fcgate', label: 'Gate', kind: 'cycle', input: 'fcgate' },
-  { id: 't-fcval', label: 'Frequency / period', kind: 'info', wide: true, val: fcText,
+  { id: 't-fcval', label: 'Frequency / period', kind: 'info', wide: true, html: true, val: fcText,
     click: () => { $('fcshow').value = $('fcshow').value === 't' ? 'f' : 't'; fire('fcshow'); renderTiles(); } },
   { id: 't-fcinfo', label: 'Measurement', kind: 'info', wide: true, val: fcSpread, click: () => {} },
   { g: 'Monitor' },
@@ -1795,7 +1808,7 @@ const HELP = {
   't-fcsrc': 'What to count: CH1 or CH2 (rising crossings of Level, with 20 mV hysteresis, on the channel’s input range) or a DIO pin (rising edges, up to about 50 MHz).',
   't-fclev': 'Crossing level for CH1/CH2, in volts. Put it where the signal is steepest, usually near its middle.',
   't-fcgate': 'Minimum measuring time. A measurement ends at the first edge after the gate: longer gates give more digits (resolution improves in proportion), shorter ones update faster.',
-  't-fcval': 'Click to switch between frequency (f) and period (T). Latest reading, shown with as many digits as its resolution supports. Absolute accuracy is set by the board’s clock reference (crystal tolerance, typically some tens of ppm), not by the resolution.',
+  't-fcval': 'Click to switch between frequency (f) and period (T). Shown in scientific notation with the digits after the point in groups of three; in the frequency, the digit worth 1 Hz is highlighted. Latest reading, shown with as many digits as its resolution supports. Absolute accuracy is set by the board’s clock reference (crystal tolerance, typically some tens of ppm), not by the resolution.',
   't-fcinfo': 'Periods counted and the time they took, and the scatter (standard deviation) of the last readings in parts per billion: a direct measure of the counter’s precision on this signal.',
   't-flog': 'Linear or logarithmic frequency axis (log shows the same band, starting at most five decades below its top).',
   't-smark': 'Automatic peak marker (hollow, labelled “pk”) on the highest bin of each shown channel, interpolated between bins; the readout gives its frequency and level. Separate from the numbered markers: Clear markers does not remove it, this tile turns it off.',
@@ -1955,7 +1968,7 @@ function buildTiles() {
 function renderTiles() {
   for (const t of TILES) {
     if (t.g) continue; const b = $(t.id);
-    b.querySelector('.tv').textContent = tileVal(t);
+    if (t.html) b.querySelector('.tv').innerHTML = tileVal(t); else b.querySelector('.tv').textContent = tileVal(t);
     b.classList.toggle('sel', selTile === t); b.classList.toggle('on', !!(t.on && t.on()));
   }
   $('l_link').classList.toggle('on', !!ad);                       // status LEDs, as on DSPECT
