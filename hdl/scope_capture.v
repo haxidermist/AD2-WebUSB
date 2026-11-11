@@ -15,7 +15,8 @@
 //
 // Sampling: one stored sample every dec + 1 clocks (decimation). Mode 1 averages 2^avk raw samples per stored sample
 // (avk 2..16), mode 2 stores the min and max of each interval (needs dec >= 1). The trigger runs at the full 100 MS/s on
-// CH1 or CH2 (level crossing with hysteresis), on an LA pattern (with optional edge), or on a cross-trigger event.
+// CH1 or CH2 (level crossing with hysteresis), on an LA pattern (with optional edge, also usable in scope mode), or on
+// a cross-trigger event. A DIO trigger in scope mode lands about one sample (10 ns) late relative to the analog data.
 `default_nettype none
 module scope_capture (
     input  wire        clk100,
@@ -33,6 +34,7 @@ module scope_capture (
     input  wire [15:0] lmask, input wire [15:0] lval,                       // LA trigger pattern
     input  wire [3:0]  lch, input wire ledge, input wire lpol,              // LA edge channel, edge on, falling edge
     input  wire        ext_trig,                      // use the cross-trigger event instead of the own condition
+    input  wire        dio_trig,                      // scope mode: trigger on the LA pattern / edge condition (DIO pins)
     input  wire        xev,                           // cross-trigger event (clk100 pulse)
     // control toggles (any clock domain)
     input  wire        arm_t, input wire force_t, input wire stop_t,
@@ -145,7 +147,7 @@ module scope_capture (
             dc <= stb ? dec : dc - 24'h1;
             stb <= stb ? (dec == 24'h0) : (dc == 24'h1);
             if (stg == 2'd1 && !tpend) begin
-                if (ten && (ext_trig ? xev : la ? lev1 : tev)) begin tpend <= 1'b1; tfo <= 1'b0; capev <= 1'b1; if (la200) tph <= !llo1; end
+                if (ten && (ext_trig ? xev : (la || dio_trig) ? lev1 : tev)) begin tpend <= 1'b1; tfo <= 1'b0; capev <= 1'b1; if (la200) tph <= !llo1; end
                 else if (fs[2] != fs[1] || !ten) begin tpend <= 1'b1; tfo <= 1'b1; end
             end
             // packed LA: the first stored sample after the trigger is the older half of a word if it arrives on a

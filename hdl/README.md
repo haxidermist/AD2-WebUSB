@@ -61,7 +61,7 @@ followed by a few idle TCKs before the next scan that depends on it (the app clo
 | `63` | `CMD_TESTPAT` | DIO test patterns |
 | `64`, `65` | `CMD_PG`, `CMD_PG_RATE` | pattern generator |
 | `66` | `CMD_SUPPLIES` | user supply enables |
-| `67` | `CMD_XTRIG` | cross-trigger routing and the T1/T2 pins |
+| `67` | `CMD_XTRIG` | cross-trigger routing and the T1/T2 pins; capture source 3 = AWG start, 5 = DIO pattern/edge in scope mode |
 | `68` | `CMD_DDS` | DDS frequency |
 | `69` | `CMD_EEPROM` | read a calibration EEPROM word (next USER2 capture) |
 

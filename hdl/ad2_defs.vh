@@ -15,7 +15,7 @@ localparam [7:0] CMD_TESTPAT   = 8'h63;   // [0] DIO counter pattern, [1] DIO 10
 localparam [7:0] CMD_PG        = 8'h64;   // pattern generator: [0] run, [1] memory load, [2] once, [26:16] last address
 localparam [7:0] CMD_PG_RATE   = 8'h65;   // [23:0] pattern generator divider: rate = 100 MHz / (div + 1)
 localparam [7:0] CMD_SUPPLIES  = 8'h66;   // [1:0] user supply enables {EN_PWR_USR, N5}
-localparam [7:0] CMD_XTRIG     = 8'h67;   // cross-trigger routing, see dio_pattern.v
+localparam [7:0] CMD_XTRIG     = 8'h67;   // cross-trigger routing, see dio_pattern.v (capture source 5: DIO in scope mode)
 localparam [7:0] CMD_DDS       = 8'h68;   // [31:0] DDS frequency tuning word, [32] DDS on
 localparam [7:0] CMD_EEPROM    = 8'h69;   // [7:0] word address: read one calibration EEPROM word
 

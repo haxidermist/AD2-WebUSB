@@ -112,7 +112,7 @@ The screenshots are of the app running on a real board, with W1 looped back to C
 
 | Instrument | Details |
 |---|---|
-| Oscilloscope | 2 channels, 14-bit, 10 kS/s to 100 MS/s, 8192 samples. 1 mV/div to 5 V/div with offset; the two hardware input ranges (±2.7 V and ±25 V) are picked automatically. Edge trigger on CH1 or CH2 with auto timeout. Trigger-aligned averaging. |
+| Oscilloscope | 2 channels, 14-bit, 10 kS/s to 100 MS/s, 8192 samples. 1 mV/div to 5 V/div with offset; the two hardware input ranges (±2.7 V and ±25 V) are picked automatically. Trigger on a CH1 or CH2 level crossing, on the start of each waveform-generator period, or on an edge of any DIO pin, with auto timeout. Trigger-aligned averaging. |
 | Spectrum analyser | 8192-point FFT of both channels in dBV. Blackman-Harris, Hann, flat-top or rectangular window; live, averaged or max-hold trace; vector averaging of trigger-aligned waveforms; linear or log frequency axis; peak marker. |
 | Waveform generator | W1 and W2: sine, square, triangle, sawtooth, sinc (1 to 100 lobes) and PRBS spread-spectrum (order 3 to 12), 1 Hz to 10 MHz, amplitude to 5 V, W2 phase offset. |
 | Power supplies | V+ and V− 0.5 to 5 V, on/off, USB or external power mode. Monitors show the USB and AUX input voltage and current and the board temperature. |

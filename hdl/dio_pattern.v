@@ -9,7 +9,8 @@
 // 100 MHz / (pg_div + 1), looping or once, on the pins enabled in dio_oe.
 //
 // Cross-trigger routing (CMD_XTRIG), all in the 100 MHz domain:
-//   csrc [2:0]  capture trigger: 0 own condition (scope level / LA pattern), 1 T1, 2 T2, 3 AWG start, 4 PG start
+//   csrc [2:0]  capture trigger: 0 own condition (scope level / LA pattern), 1 T1, 2 T2, 3 AWG start, 4 PG start,
+//               5 DIO pattern/edge (CMD_LA_TRIG) also in scope mode (handled in scope_capture.v)
 //   cpol        external trigger edge: 0 rising, 1 falling
 //   asrc [2:0]  AWG start / psrc [2:0] PG start: 0 immediately, 1 capture trigger, 2 T1 rising, 3 T2 rising,
 //               4 the other generator's start

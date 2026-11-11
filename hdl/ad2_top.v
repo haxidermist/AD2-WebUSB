@@ -261,7 +261,7 @@ module ad2_top (
         .clk100(clk100), .adc_rise(adc_rise), .adc_fall(adc_fall), .la_rise(la_rise), .la_fall(la_fall),
         .dec(dec), .pre(pre), .cont(cont), .la(la), .la200(la200), .smode(smode), .avk(avk),
         .lvl(lvl), .tlo(tlo), .thi(thi), .tsrc(tsrc), .tslope(tslope), .ten(ten),
-        .lmask(lmask), .lval(lval), .lch(lch), .ledge(ledge), .lpol(lpol), .ext_trig(csrc != 3'd0), .xev(xev),
+        .lmask(lmask), .lval(lval), .lch(lch), .ledge(ledge), .lpol(lpol), .ext_trig(csrc != 3'd0 && csrc != 3'd5), .dio_trig(csrc == 3'd5), .xev(xev),
         .arm_t(arm_t), .force_t(force_t), .stop_t(stop_t),
         .run(run), .done(done), .trg(trg), .tph(tph), .stg(stg), .tpos(tpos), .capev(capev),
         .done_t(done_t), .cont_t(cont_t), .avg(avg),
